@@ -52,10 +52,12 @@ export function AuditorOverview() {
       unit,
       active,
       running,
+      safe,
       disputed: disputedShift || disputedWithdrawal,
       over: Boolean(active) && isOverLimit(running),
       openedBy: active ? (data.names[active.opened_by] ?? "Usuário") : null,
     };
+
   });
 
   const overLimit = cards.filter((c) => c.over);
