@@ -9,10 +9,11 @@ type Props = {
   eyebrow: string;
   title: string;
   subtitle?: string | undefined;
+  wide?: boolean;
   children?: ReactNode;
 };
 
-export function DashboardShell({ eyebrow, title, subtitle, children }: Props) {
+export function DashboardShell({ eyebrow, title, subtitle, wide, children }: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
