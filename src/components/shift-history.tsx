@@ -33,10 +33,12 @@ export function ShiftHistory() {
               <tr>
                 <th className="py-2 pr-3">Unidade</th>
                 <th className="py-2 pr-3">Abertura</th>
-                <th className="py-2 pr-3">Esperado</th>
-                <th className="py-2 pr-3">Contado</th>
-                <th className="py-2 pr-3">Diferença</th>
-                <th className="py-2 pr-3">Fechamento</th>
+                <th className="py-2 pr-3">Esperado (abertura)</th>
+                <th className="py-2 pr-3">Contado (abertura)</th>
+                <th className="py-2 pr-3">Diferença abertura</th>
+                <th className="py-2 pr-3">Esperado no Fechamento</th>
+                <th className="py-2 pr-3">Contado/Repassado</th>
+                <th className="py-2 pr-3">Diferença do Turno</th>
                 <th className="py-2" />
               </tr>
             </thead>
@@ -45,7 +47,16 @@ export function ShiftHistory() {
                 const diff =
                   Math.round((Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100) /
                   100;
-                const bad = Math.abs(diff) >= 0.01 || s.status === "disputed";
+                const hasClosing =
+                  s.expected_closing_total !== null && s.closing_total !== null;
+                const shiftDiff = hasClosing
+                  ? Math.round(
+                      (Number(s.closing_total) - Number(s.expected_closing_total)) * 100,
+                    ) / 100
+                  : null;
+                const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
+                const openingBad = Math.abs(diff) >= 0.01;
+                const bad = openingBad || shiftBad || s.status === "disputed";
                 return (
                   <tr
                     key={s.id}
@@ -68,10 +79,15 @@ export function ShiftHistory() {
                     <td className="py-3 pr-3">{formatBRL(s.expected_opening_total)}</td>
                     <td className="py-3 pr-3">{formatBRL(s.actual_opening_total)}</td>
                     <td
-                      className={`py-3 pr-3 font-semibold ${bad ? "text-destructive" : "text-muted-foreground"}`}
+                      className={`py-3 pr-3 font-semibold ${openingBad ? "text-destructive" : "text-muted-foreground"}`}
                     >
                       {diff > 0 ? "+" : ""}
                       {formatBRL(diff)}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {s.expected_closing_total === null
+                        ? "—"
+                        : formatBRL(s.expected_closing_total)}
                     </td>
                     <td className="py-3 pr-3">
                       {s.closing_total === null ? "—" : formatBRL(s.closing_total)}
@@ -81,6 +97,23 @@ export function ShiftHistory() {
                         </span>
                       ) : null}
                     </td>
+                    <td
+                      className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {shiftDiff === null ? (
+                        "—"
+                      ) : (
+                        <>
+                          {shiftDiff > 0 ? "+" : ""}
+                          {formatBRL(shiftDiff)}
+                          {shiftBad ? (
+                            <span className="block text-xs">
+                              {shiftDiff > 0 ? "Sobra" : "Falta"}
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
                     <td className="py-3">
                       <Button size="sm" variant="ghost" onClick={() => setDetail(s)}>
                         Ver contagem
@@ -89,6 +122,7 @@ export function ShiftHistory() {
                   </tr>
                 );
               })}
+
             </tbody>
           </table>
         </div>
