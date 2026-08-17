@@ -183,6 +183,8 @@ function AuditorDashboard() {
           </ul>
         )}
       </section>
+        </TabsContent>
+      </Tabs>
     </DashboardShell>
   );
 }
