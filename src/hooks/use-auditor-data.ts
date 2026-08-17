@@ -44,6 +44,7 @@ export type CashCountRow = {
   counted_by: string;
   total_calculated: number;
   created_at: string;
+  notes_200: number;
   notes_100: number;
   notes_50: number;
   notes_20: number;
