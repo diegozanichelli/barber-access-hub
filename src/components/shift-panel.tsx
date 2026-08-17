@@ -18,7 +18,13 @@ import { WithdrawalDialog } from "@/components/withdrawal-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
-import { computeExpectedClosing, computeRunningCash, isOverLimit } from "@/lib/running-cash";
+import {
+  computeExpectedClosing,
+  computeRunningCash,
+  computeSafeBalance,
+  isOverLimit,
+} from "@/lib/running-cash";
+
 import { getReceiptUrl } from "@/lib/transactions";
 
 type Props = {
@@ -88,12 +94,15 @@ export function ShiftPanel({ userId, unitId }: Props) {
   });
 
   const runningCash = useMemo(
-    () =>
-      openShift
-        ? computeRunningCash(openShift.actual_opening_total, transactions ?? [], withdrawals ?? [])
-        : 0,
+    () => (openShift ? computeRunningCash(openShift.actual_opening_total, transactions ?? []) : 0),
+    [openShift, transactions],
+  );
+
+  const safeBalance = useMemo(
+    () => (openShift ? computeSafeBalance(transactions ?? [], withdrawals ?? []) : 0),
     [openShift, transactions, withdrawals],
   );
+
 
 
   function invalidateShift() {
@@ -161,8 +170,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
       const expectedClosing = computeExpectedClosing(
         openShift.actual_opening_total,
         transactions ?? [],
-        withdrawals ?? [],
       );
+
       const diff = Math.round((payload.total - expectedClosing) * 100) / 100;
 
       const { error: countError } = await supabase.from("cash_counts").insert({
@@ -335,7 +344,14 @@ export function ShiftPanel({ userId, unitId }: Props) {
                   {formatBRL(runningCash)}
                 </dd>
               </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Disponível no cofre</dt>
+                <dd className={safeBalance > 0 ? "font-semibold" : "text-muted-foreground"}>
+                  {formatBRL(safeBalance)}
+                </dd>
+              </div>
             </dl>
+
 
             <div className="mt-4 grid gap-3">
               <Button className="h-14 w-full text-base" onClick={() => setTxType("income")}>
@@ -361,11 +377,18 @@ export function ShiftPanel({ userId, unitId }: Props) {
               <Button
                 variant="secondary"
                 className="h-14 w-full text-base"
+                disabled={safeBalance <= 0}
                 onClick={() => setWithdrawalOpen(true)}
               >
                 <HandCoins className="size-5" />
                 Retirada de Sócio
               </Button>
+              {safeBalance <= 0 ? (
+                <p className="-mt-1 text-xs text-muted-foreground">
+                  Faça uma sangria para o cofre antes de registrar uma retirada de sócio.
+                </p>
+              ) : null}
+
               <Button variant="outline" className="h-12 w-full" onClick={() => setCalcMode("closing")}>
                 <LockKeyhole className="size-4" />
                 Fechar Caixa
@@ -528,7 +551,9 @@ export function ShiftPanel({ userId, unitId }: Props) {
             shiftId={openShift.id}
             unitId={unitId}
             userId={userId}
+            safeBalance={safeBalance}
           />
+
         </>
       ) : null}
     </>

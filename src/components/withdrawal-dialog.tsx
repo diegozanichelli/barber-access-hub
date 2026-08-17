@@ -30,9 +30,17 @@ type Props = {
   shiftId: string;
   unitId: string;
   userId: string;
+  safeBalance: number;
 };
 
-export function WithdrawalDialog({ open, onOpenChange, shiftId, unitId, userId }: Props) {
+export function WithdrawalDialog({
+  open,
+  onOpenChange,
+  shiftId,
+  unitId,
+  userId,
+  safeBalance,
+}: Props) {
   const queryClient = useQueryClient();
   const [partnerId, setPartnerId] = useState("");
   const [amount, setAmount] = useState("");
@@ -72,7 +80,8 @@ export function WithdrawalDialog({ open, onOpenChange, shiftId, unitId, userId }
       toast.error("Erro ao registrar retirada", { description: error.message }),
   });
 
-  const valid = partnerId !== "" && Number.isFinite(value) && value > 0;
+  const exceedsSafe = Number.isFinite(value) && value > safeBalance;
+  const valid = partnerId !== "" && Number.isFinite(value) && value > 0 && !exceedsSafe;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,7 +89,8 @@ export function WithdrawalDialog({ open, onOpenChange, shiftId, unitId, userId }
         <DialogHeader>
           <DialogTitle>Retirada de Sócio</DialogTitle>
           <DialogDescription>
-            A retirada fica pendente até a confirmação do sócio e já sai do caixa.
+            A retirada sai do cofre (dinheiro já separado por sangria), não da gaveta, e fica
+            pendente até a confirmação do sócio.
           </DialogDescription>
         </DialogHeader>
 
@@ -110,7 +120,14 @@ export function WithdrawalDialog({ open, onOpenChange, shiftId, unitId, userId }
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
-            {valid ? (
+            <p className="text-xs text-muted-foreground">
+              Disponível no cofre: {formatBRL(safeBalance)}
+            </p>
+            {exceedsSafe ? (
+              <p className="text-xs font-semibold text-destructive">
+                Valor acima do saldo do cofre. Faça uma sangria antes de retirar esse valor.
+              </p>
+            ) : Number.isFinite(value) && value > 0 ? (
               <p className="text-xs text-muted-foreground">{formatBRL(value)}</p>
             ) : null}
           </div>

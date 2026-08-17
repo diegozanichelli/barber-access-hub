@@ -1,6 +1,6 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { formatBRL } from "@/lib/cash";
-import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
+import { computeRunningCash, computeSafeBalance, isOverLimit } from "@/lib/running-cash";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -37,18 +37,27 @@ export function AuditorOverview() {
       ? computeRunningCash(
           active.actual_opening_total,
           data.transactions.filter((t) => t.shift_id === active.id),
+        )
+      : 0;
+
+    const safe = active
+      ? computeSafeBalance(
+          data.transactions.filter((t) => t.shift_id === active.id),
           data.withdrawals.filter((w) => w.shift_id === active.id),
         )
       : 0;
+
 
     return {
       unit,
       active,
       running,
+      safe,
       disputed: disputedShift || disputedWithdrawal,
       over: Boolean(active) && isOverLimit(running),
       openedBy: active ? (data.names[active.opened_by] ?? "Usuário") : null,
     };
+
   });
 
   const overLimit = cards.filter((c) => c.over);
@@ -130,22 +139,43 @@ export function AuditorOverview() {
                 ) : null}
               </div>
 
-              <p className="mt-3 text-xs uppercase tracking-wide text-muted-foreground">
-                Caixa em gaveta
-              </p>
-              <p
-                className={`text-2xl font-semibold ${
-                  c.over ? "text-destructive" : c.active ? "text-primary" : "text-muted-foreground"
-                }`}
-              >
-                {c.active ? formatBRL(c.running) : "—"}
-              </p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Caixa em gaveta
+                  </p>
+                  <p
+                    className={`text-2xl font-semibold ${
+                      c.over
+                        ? "text-destructive"
+                        : c.active
+                          ? "text-primary"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {c.active ? formatBRL(c.running) : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Disponível no cofre
+                  </p>
+                  <p
+                    className={`text-2xl font-semibold ${
+                      c.active && c.safe < 0 ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    {c.active ? formatBRL(c.safe) : "—"}
+                  </p>
+                </div>
+              </div>
               {c.over ? (
                 <p className="mt-1 text-xs font-semibold text-destructive">
                   Acima do limite de R$ 1.000 — solicitar sangria.
                 </p>
               ) : null}
             </article>
+
           ))}
         </div>
       </section>
