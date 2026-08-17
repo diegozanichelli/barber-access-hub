@@ -85,6 +85,57 @@ export type Database = {
           },
         ]
       }
+      partner_withdrawals: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          partner_id: string
+          shift_id: string
+          status: Database["public"]["Enums"]["withdrawal_status"]
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          partner_id: string
+          shift_id: string
+          status?: Database["public"]["Enums"]["withdrawal_status"]
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          partner_id?: string
+          shift_id?: string
+          status?: Database["public"]["Enums"]["withdrawal_status"]
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_withdrawals_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_withdrawals_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -282,6 +333,21 @@ export type Database = {
         }
         Returns: boolean
       }
+      list_partners: {
+        Args: never
+        Returns: {
+          full_name: string
+          id: string
+          unit_id: string
+        }[]
+      }
+      user_display_names: {
+        Args: { _ids: string[] }
+        Returns: {
+          full_name: string
+          id: string
+        }[]
+      }
     }
     Enums: {
       app_role: "atendente" | "supervisor" | "socio" | "auditor"
@@ -291,6 +357,7 @@ export type Database = {
         | "Assinatura Nova"
         | "Renovação"
         | "Despesa"
+      withdrawal_status: "pending" | "approved" | "disputed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -426,6 +493,7 @@ export const Constants = {
         "Renovação",
         "Despesa",
       ],
+      withdrawal_status: ["pending", "approved", "disputed"],
     },
   },
 } as const
