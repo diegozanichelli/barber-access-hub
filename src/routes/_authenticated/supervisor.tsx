@@ -6,12 +6,12 @@ import { useSessionProfile } from "@/hooks/use-session-profile";
 export const Route = createFileRoute("/_authenticated/supervisor")({
   head: () => ({
     meta: [
-      { title: "Painel do Supervisor | Caixa Barber" },
+      { title: "Painel do Supervisor | Caixa Grupo Roots" },
       {
         name: "description",
         content: "Acompanhe o caixa aberto e registre entradas e despesas da unidade.",
       },
-      { property: "og:title", content: "Painel do Supervisor | Caixa Barber" },
+      { property: "og:title", content: "Painel do Supervisor | Caixa Grupo Roots" },
       {
         property: "og:description",
         content: "Turno ativo, entradas e despesas com comprovante por unidade.",

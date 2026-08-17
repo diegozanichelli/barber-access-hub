@@ -25,9 +25,9 @@ import { ROLE_LABELS, ROLE_ORDER, type AppRole } from "@/lib/roles";
 export const Route = createFileRoute("/_authenticated/auditor")({
   head: () => ({
     meta: [
-      { title: "Painel do Auditor | Caixa Barber" },
+      { title: "Painel do Auditor | Caixa Grupo Roots" },
       { name: "description", content: "Gerencie usuários, papéis e unidades da rede." },
-      { property: "og:title", content: "Painel do Auditor | Caixa Barber" },
+      { property: "og:title", content: "Painel do Auditor | Caixa Grupo Roots" },
       { property: "og:description", content: "Gestão de usuários e auditoria de caixa da rede." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

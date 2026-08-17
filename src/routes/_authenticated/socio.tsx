@@ -11,9 +11,9 @@ import { formatBRL } from "@/lib/cash";
 export const Route = createFileRoute("/_authenticated/socio")({
   head: () => ({
     meta: [
-      { title: "Painel do Sócio | Caixa Barber" },
+      { title: "Painel do Sócio | Caixa Grupo Roots" },
       { name: "description", content: "Confirme ou conteste retiradas de sócio da rede." },
-      { property: "og:title", content: "Painel do Sócio | Caixa Barber" },
+      { property: "og:title", content: "Painel do Sócio | Caixa Grupo Roots" },
       { property: "og:description", content: "Aprovações de retiradas e visão geral da rede." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
