@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
+import { parseAmount } from "@/lib/transactions";
 
 type Props = {
   open: boolean;
@@ -45,7 +46,7 @@ export function WithdrawalDialog({ open, onOpenChange, shiftId, unitId, userId }
     },
   });
 
-  const value = Number(amount.replace(",", "."));
+  const value = parseAmount(amount);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -65,6 +66,7 @@ export function WithdrawalDialog({ open, onOpenChange, shiftId, unitId, userId }
       setAmount("");
       onOpenChange(false);
       void queryClient.invalidateQueries({ queryKey: ["shift-withdrawals"] });
+      void queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
     },
     onError: (error: Error) =>
       toast.error("Erro ao registrar retirada", { description: error.message }),

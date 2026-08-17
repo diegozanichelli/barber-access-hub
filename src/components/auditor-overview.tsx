@@ -35,7 +35,7 @@ export function AuditorOverview() {
 
     const running = active
       ? computeRunningCash(
-          active.expected_opening_total,
+          active.actual_opening_total,
           data.transactions.filter((t) => t.shift_id === active.id),
           data.withdrawals.filter((w) => w.shift_id === active.id),
         )
