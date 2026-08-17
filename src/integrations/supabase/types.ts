@@ -14,6 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      cash_counts: {
+        Row: {
+          coins_005: number
+          coins_010: number
+          coins_025: number
+          coins_050: number
+          coins_1: number
+          count_type: string
+          counted_by: string
+          created_at: string
+          id: string
+          notes: string | null
+          notes_10: number
+          notes_100: number
+          notes_2: number
+          notes_20: number
+          notes_5: number
+          notes_50: number
+          shift_id: string
+          total_calculated: number
+        }
+        Insert: {
+          coins_005?: number
+          coins_010?: number
+          coins_025?: number
+          coins_050?: number
+          coins_1?: number
+          count_type: string
+          counted_by: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          notes_10?: number
+          notes_100?: number
+          notes_2?: number
+          notes_20?: number
+          notes_5?: number
+          notes_50?: number
+          shift_id: string
+          total_calculated?: number
+        }
+        Update: {
+          coins_005?: number
+          coins_010?: number
+          coins_025?: number
+          coins_050?: number
+          coins_1?: number
+          count_type?: string
+          counted_by?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          notes_10?: number
+          notes_100?: number
+          notes_2?: number
+          notes_20?: number
+          notes_5?: number
+          notes_50?: number
+          shift_id?: string
+          total_calculated?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_counts_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -39,6 +110,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "profiles_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shifts: {
+        Row: {
+          actual_opening_total: number
+          closed_at: string | null
+          closed_by: string | null
+          closing_total: number | null
+          created_at: string
+          expected_opening_total: number
+          id: string
+          opened_at: string
+          opened_by: string
+          status: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          actual_opening_total?: number
+          closed_at?: string | null
+          closed_by?: string | null
+          closing_total?: number | null
+          created_at?: string
+          expected_opening_total?: number
+          id?: string
+          opened_at?: string
+          opened_by: string
+          status?: string
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          actual_opening_total?: number
+          closed_at?: string | null
+          closed_by?: string | null
+          closing_total?: number | null
+          created_at?: string
+          expected_opening_total?: number
+          id?: string
+          opened_at?: string
+          opened_by?: string
+          status?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shifts_unit_id_fkey"
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
@@ -90,6 +214,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_unit_id: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
