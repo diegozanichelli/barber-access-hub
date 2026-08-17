@@ -19,9 +19,19 @@ export const expenseSchema = z.object({
   description: z.string().trim().min(3, "Descreva o que foi comprado").max(500),
 });
 
+export const safeDropSchema = z.object({
+  amount: z.number().positive("Informe um valor maior que zero").max(1_000_000),
+  description: z.string().trim().max(200).optional(),
+});
+
 /** Photo is mandatory for subscriptions (new/renewal) and for every Pix payment. */
 export function incomePhotoRequired(category: string, paymentMethod: string): boolean {
   return category === "Assinatura Nova" || category === "Renovação" || paymentMethod === "Pix";
+}
+
+/** True when the amount has no cents (e.g. 38,00) — likely an incorrect rounding. */
+export function isRoundAmount(value: number): boolean {
+  return Number.isFinite(value) && value > 0 && Math.round(value * 100) % 100 === 0;
 }
 
 export function parseAmount(raw: string): number {
@@ -29,6 +39,7 @@ export function parseAmount(raw: string): number {
   const value = Number(normalized);
   return Number.isFinite(value) ? Math.round(value * 100) / 100 : NaN;
 }
+
 
 export async function uploadReceipt(file: File, unitId: string, shiftId: string): Promise<string> {
   const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
