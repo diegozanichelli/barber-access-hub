@@ -136,7 +136,13 @@ function AuditorDashboard() {
                     <Select
                       value={draft.role}
                       onValueChange={(role) =>
-                        setDrafts((p) => ({ ...p, [user.id]: { ...draft, role: role as AppRole } }))
+                        setDrafts((p) => ({
+                          ...p,
+                          [user.id]: {
+                            role: role as AppRole,
+                            unitId: role === "auditor" ? NO_UNIT : draft.unitId,
+                          },
+                        }))
                       }
                     >
                       <SelectTrigger aria-label={`Papel de ${user.fullName}`}>
