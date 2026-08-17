@@ -238,7 +238,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
         .insert({
           unit_id: unitId,
           opened_by: userId,
-          expected_opening_total: payload.total,
+          expected_opening_total: expected,
           actual_opening_total: payload.total,
           status: "open",
         })
