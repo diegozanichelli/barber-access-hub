@@ -170,8 +170,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
       const expectedClosing = computeExpectedClosing(
         openShift.actual_opening_total,
         transactions ?? [],
-        withdrawals ?? [],
       );
+
       const diff = Math.round((payload.total - expectedClosing) * 100) / 100;
 
       const { error: countError } = await supabase.from("cash_counts").insert({
