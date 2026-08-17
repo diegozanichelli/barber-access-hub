@@ -109,10 +109,12 @@ export function ShiftPanel({ userId, unitId }: Props) {
         .from("shifts")
         .select("closing_total")
         .eq("unit_id", unitId)
+        .eq("status", "closed")
         .not("closing_total", "is", null)
         .order("closed_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
       if (lastError) throw lastError;
 
       const expected = Number(lastClosed?.closing_total ?? 0);
