@@ -1,12 +1,23 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownCircle, ArrowUpCircle, ImageIcon, LockKeyhole, Unlock } from "lucide-react";
+import {
+  ArrowDownCircle,
+  ArrowUpCircle,
+  HandCoins,
+  ImageIcon,
+  Inbox,
+  LockKeyhole,
+  Unlock,
+} from "lucide-react";
 import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
+import { CashLimitBanner } from "@/components/cash-limit-banner";
 import { TransactionDialog } from "@/components/transaction-dialog";
+import { WithdrawalDialog } from "@/components/withdrawal-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
+import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { getReceiptUrl } from "@/lib/transactions";
 
 type Props = {
@@ -14,28 +25,38 @@ type Props = {
   unitId: string | null;
 };
 
-type CalcMode = "opening" | "closing" | null;
+type CalcMode = "opening" | "closing" | "handover" | null;
+
+const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
+  pending: "Pendente",
+  approved: "Confirmada",
+  disputed: "Contestada",
+};
 
 export function ShiftPanel({ userId, unitId }: Props) {
   const queryClient = useQueryClient();
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
   const [txType, setTxType] = useState<"income" | "expense" | null>(null);
+  const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [lastResult, setLastResult] = useState<{ label: string; total: number } | null>(null);
 
-  const { data: openShift } = useQuery({
-    queryKey: ["open-shift", unitId],
+  const { data: shifts } = useQuery({
+    queryKey: ["unit-shifts", unitId],
     enabled: !!unitId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("shifts")
         .select("*")
         .eq("unit_id", unitId!)
-        .eq("status", "open")
-        .maybeSingle();
+        .in("status", ["open", "pending_handover"])
+        .order("opened_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
+
+  const openShift = (shifts ?? []).find((s) => s.status === "open") ?? null;
+  const pendingShift = (shifts ?? []).find((s) => s.status === "pending_handover") ?? null;
 
   const { data: transactions } = useQuery({
     queryKey: ["shift-transactions", openShift?.id],
@@ -47,9 +68,37 @@ export function ShiftPanel({ userId, unitId }: Props) {
         .eq("shift_id", openShift!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
+
+  const { data: withdrawals } = useQuery({
+    queryKey: ["shift-withdrawals", openShift?.id],
+    enabled: !!openShift?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("partner_withdrawals")
+        .select("*")
+        .eq("shift_id", openShift!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const runningCash = useMemo(
+    () =>
+      openShift
+        ? computeRunningCash(openShift.expected_opening_total, transactions ?? [], withdrawals ?? [])
+        : 0,
+    [openShift, transactions, withdrawals],
+  );
+
+  function invalidateShift() {
+    void queryClient.invalidateQueries({ queryKey: ["unit-shifts"] });
+    void queryClient.invalidateQueries({ queryKey: ["shift-transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["shift-withdrawals"] });
+  }
 
   const openMutation = useMutation({
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
@@ -59,7 +108,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
         .from("shifts")
         .select("closing_total")
         .eq("unit_id", unitId)
-        .eq("status", "closed")
+        .not("closing_total", "is", null)
         .order("closed_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -96,7 +145,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
       setCalcMode(null);
       setLastResult({ label: "Caixa aberto com", total });
       toast.success("Caixa aberto", { description: `Total contado: ${formatBRL(total)}` });
-      void queryClient.invalidateQueries({ queryKey: ["open-shift"] });
+      invalidateShift();
     },
     onError: (error: Error) => toast.error("Erro ao abrir o caixa", { description: error.message }),
   });
@@ -118,7 +167,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
       const { error: shiftError } = await supabase
         .from("shifts")
         .update({
-          status: "closed",
+          status: "pending_handover",
           closing_total: payload.total,
           closed_by: userId,
           closed_at: new Date().toISOString(),
@@ -130,12 +179,80 @@ export function ShiftPanel({ userId, unitId }: Props) {
     },
     onSuccess: (total) => {
       setCalcMode(null);
-      setLastResult({ label: "Caixa fechado com", total });
-      toast.success("Caixa fechado", { description: `Total contado: ${formatBRL(total)}` });
-      void queryClient.invalidateQueries({ queryKey: ["open-shift"] });
+      setLastResult({ label: "Turno enviado para repasse com", total });
+      toast.success("Turno aguardando repasse", {
+        description: `Total contado: ${formatBRL(total)}. O próximo atendente deve receber o turno.`,
+      });
+      invalidateShift();
     },
     onError: (error: Error) =>
       toast.error("Erro ao fechar o caixa", { description: error.message }),
+  });
+
+  const handoverMutation = useMutation({
+    mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
+      if (!unitId) throw new Error("Você não está atribuído a uma unidade.");
+      if (!pendingShift) throw new Error("Nenhum turno pendente de repasse.");
+
+      const expected = Number(pendingShift.closing_total ?? 0);
+      const matches = Math.abs(expected - payload.total) < 0.005;
+
+      const { error: countError } = await supabase.from("cash_counts").insert({
+        shift_id: pendingShift.id,
+        count_type: "handover",
+        counted_by: userId,
+        ...payload.quantities,
+        total_calculated: payload.total,
+        notes: payload.notes || null,
+      });
+      if (countError) throw countError;
+
+      const { error: prevError } = await supabase
+        .from("shifts")
+        .update({ status: matches ? "closed" : "disputed" })
+        .eq("id", pendingShift.id);
+      if (prevError) throw prevError;
+
+      const { data: shift, error: shiftError } = await supabase
+        .from("shifts")
+        .insert({
+          unit_id: unitId,
+          opened_by: userId,
+          expected_opening_total: payload.total,
+          actual_opening_total: payload.total,
+          status: "open",
+        })
+        .select()
+        .single();
+      if (shiftError) throw shiftError;
+
+      const { error: openCountError } = await supabase.from("cash_counts").insert({
+        shift_id: shift.id,
+        count_type: "opening",
+        counted_by: userId,
+        ...payload.quantities,
+        total_calculated: payload.total,
+        notes: payload.notes || null,
+      });
+      if (openCountError) throw openCountError;
+
+      return { total: payload.total, matches, expected };
+    },
+    onSuccess: ({ total, matches, expected }) => {
+      setCalcMode(null);
+      setLastResult({ label: "Turno recebido com", total });
+      if (matches) {
+        toast.success("Repasse confirmado", { description: `Total conferido: ${formatBRL(total)}` });
+      } else {
+        toast.error("Divergência detectada! A Auditoria foi notificada.", {
+          description: `Repassado: ${formatBRL(expected)} · Contado: ${formatBRL(total)}`,
+          duration: 10000,
+        });
+      }
+      invalidateShift();
+    },
+    onError: (error: Error) =>
+      toast.error("Erro ao receber o turno", { description: error.message }),
   });
 
   async function openReceipt(path: string) {
@@ -157,6 +274,10 @@ export function ShiftPanel({ userId, unitId }: Props) {
 
   return (
     <>
+      {openShift && isOverLimit(runningCash) ? (
+        <CashLimitBanner runningCash={runningCash} />
+      ) : null}
+
       {lastResult ? (
         <section className="surface-panel p-5">
           <p className="text-sm text-muted-foreground">{lastResult.label}</p>
@@ -181,6 +302,18 @@ export function ShiftPanel({ userId, unitId }: Props) {
                 <dt className="text-muted-foreground">Abertura esperada</dt>
                 <dd>{formatBRL(openShift.expected_opening_total)}</dd>
               </div>
+              <div className="flex justify-between border-t border-border/60 pt-2">
+                <dt className="text-muted-foreground">Dinheiro em caixa agora</dt>
+                <dd
+                  className={
+                    isOverLimit(runningCash)
+                      ? "font-semibold text-destructive"
+                      : "font-semibold text-primary"
+                  }
+                >
+                  {formatBRL(runningCash)}
+                </dd>
+              </div>
             </dl>
 
             <div className="mt-4 grid gap-3">
@@ -196,11 +329,33 @@ export function ShiftPanel({ userId, unitId }: Props) {
                 <ArrowDownCircle className="size-5" />
                 Registrar Despesa
               </Button>
+              <Button
+                variant="secondary"
+                className="h-14 w-full text-base"
+                onClick={() => setWithdrawalOpen(true)}
+              >
+                <HandCoins className="size-5" />
+                Retirada de Sócio
+              </Button>
               <Button variant="outline" className="h-12 w-full" onClick={() => setCalcMode("closing")}>
                 <LockKeyhole className="size-4" />
                 Fechar Caixa
               </Button>
             </div>
+          </>
+        ) : pendingShift ? (
+          <>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Há um turno aguardando repasse nesta unidade. Faça sua própria contagem cega para
+              receber o caixa.
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Fechado em {new Date(pendingShift.closed_at ?? pendingShift.opened_at).toLocaleString("pt-BR")}
+            </p>
+            <Button className="mt-4 h-14 w-full text-base" onClick={() => setCalcMode("handover")}>
+              <Inbox className="size-5" />
+              Receber Turno Pendente
+            </Button>
           </>
         ) : (
           <>
@@ -212,6 +367,38 @@ export function ShiftPanel({ userId, unitId }: Props) {
           </>
         )}
       </section>
+
+      {openShift && (withdrawals ?? []).length > 0 ? (
+        <section className="surface-panel p-5">
+          <h2 className="text-lg">Retiradas de sócio</h2>
+          <ul className="mt-3 divide-y divide-border/60">
+            {(withdrawals ?? []).map((w) => (
+              <li key={w.id} className="flex items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="text-sm font-medium">{formatBRL(w.amount)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(w.created_at).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <span
+                  className={
+                    w.status === "disputed"
+                      ? "text-xs font-semibold text-destructive"
+                      : w.status === "approved"
+                        ? "text-xs font-semibold text-primary"
+                        : "text-xs font-semibold text-muted-foreground"
+                  }
+                >
+                  {WITHDRAWAL_STATUS_LABEL[w.status] ?? w.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {openShift ? (
         <section className="surface-panel p-5">
@@ -285,14 +472,33 @@ export function ShiftPanel({ userId, unitId }: Props) {
         onSubmit={(payload) => closeMutation.mutate(payload)}
       />
 
+      <BlindCalculator
+        open={calcMode === "handover"}
+        onOpenChange={(o) => setCalcMode(o ? "handover" : null)}
+        title="Receber Turno Pendente"
+        description="Conte o caixa recebido. Informe apenas as quantidades; o sistema compara com o repasse."
+        submitLabel="Confirmar recebimento"
+        submitting={handoverMutation.isPending}
+        onSubmit={(payload) => handoverMutation.mutate(payload)}
+      />
+
       {openShift ? (
-        <TransactionDialog
-          type={txType}
-          onOpenChange={(o) => setTxType(o ? txType : null)}
-          shiftId={openShift.id}
-          unitId={unitId}
-          userId={userId}
-        />
+        <>
+          <TransactionDialog
+            type={txType}
+            onOpenChange={(o) => setTxType(o ? txType : null)}
+            shiftId={openShift.id}
+            unitId={unitId}
+            userId={userId}
+          />
+          <WithdrawalDialog
+            open={withdrawalOpen}
+            onOpenChange={setWithdrawalOpen}
+            shiftId={openShift.id}
+            unitId={unitId}
+            userId={userId}
+          />
+        </>
       ) : null}
     </>
   );
