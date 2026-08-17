@@ -63,6 +63,10 @@ export const updateManagedUser = createServerFn({ method: "POST" })
     });
     if (!isAuditor) throw new Error("Acesso restrito ao auditor.");
 
+    if (data.userId === context.userId && data.role !== "auditor") {
+      throw new Error("Você não pode remover seu próprio acesso de Auditor.");
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { error: delError } = await supabaseAdmin
