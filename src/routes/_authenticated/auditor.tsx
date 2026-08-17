@@ -4,9 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
+import { AuditFeed } from "@/components/audit-feed";
 import { AuditorOverview } from "@/components/auditor-overview";
+import { ShiftHistory } from "@/components/shift-history";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -70,9 +73,29 @@ function AuditorDashboard() {
       eyebrow="Auditor"
       title="Bem-vindo Admin"
       subtitle={profile?.fullName ?? undefined}
+      wide
     >
-      <AuditorOverview />
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Visão geral</TabsTrigger>
+          <TabsTrigger value="feed">Lançamentos</TabsTrigger>
+          <TabsTrigger value="history">Turnos</TabsTrigger>
+          <TabsTrigger value="users">Usuários</TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="overview" className="space-y-4">
+          <AuditorOverview />
+        </TabsContent>
+
+        <TabsContent value="feed">
+          <AuditFeed />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <ShiftHistory />
+        </TabsContent>
+
+        <TabsContent value="users">
       <section className="surface-panel p-5">
         <div className="flex items-center gap-2">
           <Users className="size-5 text-primary" aria-hidden />
@@ -160,6 +183,8 @@ function AuditorDashboard() {
           </ul>
         )}
       </section>
+        </TabsContent>
+      </Tabs>
     </DashboardShell>
   );
 }

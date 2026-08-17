@@ -9,10 +9,11 @@ type Props = {
   eyebrow: string;
   title: string;
   subtitle?: string | undefined;
+  wide?: boolean;
   children?: ReactNode;
 };
 
-export function DashboardShell({ eyebrow, title, subtitle, children }: Props) {
+export function DashboardShell({ eyebrow, title, subtitle, wide, children }: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -37,7 +38,7 @@ export function DashboardShell({ eyebrow, title, subtitle, children }: Props) {
         </Button>
       </header>
 
-      <main className="mx-auto w-full max-w-md px-4 pb-16">
+      <main className={`mx-auto w-full px-4 pb-16 ${wide ? "max-w-5xl" : "max-w-md"}`}>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">{eyebrow}</p>
         <h1 className="mt-2 text-3xl leading-tight">{title}</h1>
         {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
