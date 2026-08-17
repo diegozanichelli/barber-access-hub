@@ -14,7 +14,7 @@ import { downloadCSV, toCSV } from "@/lib/csv";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
 const ALL = "__all__";
-const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa"];
+const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"];
 
 export function AuditFeed() {
   const { data, isLoading } = useAuditorData();
@@ -54,7 +54,11 @@ export function AuditFeed() {
       rows.map((t) => [
         new Date(t.created_at).toLocaleString("pt-BR"),
         data?.unitNames[t.unit_id] ?? "",
-        t.transaction_type === "income" ? "Entrada" : "Despesa",
+        t.transaction_type === "income"
+          ? "Entrada"
+          : t.category === "Sangria"
+            ? "Sangria (cofre)"
+            : "Despesa",
         t.category,
         t.client_name ?? "",
         t.payment_method ?? "",
@@ -107,7 +111,7 @@ export function AuditFeed() {
           <SelectContent>
             <SelectItem value={ALL}>Entradas e despesas</SelectItem>
             <SelectItem value="income">Somente entradas</SelectItem>
-            <SelectItem value="expense">Somente despesas</SelectItem>
+            <SelectItem value="expense">Somente saídas</SelectItem>
           </SelectContent>
         </Select>
 
@@ -142,6 +146,7 @@ export function AuditFeed() {
         <ul className="mt-4 divide-y divide-border/60">
           {rows.map((t) => {
             const income = t.transaction_type === "income";
+            const safeDrop = t.category === "Sangria";
             return (
               <li key={t.id} className="flex items-start gap-3 py-4">
                 <ReceiptThumb
@@ -150,26 +155,34 @@ export function AuditFeed() {
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="truncate font-medium">
-                      {t.category}
-                      {t.client_name ? ` · ${t.client_name}` : ""}
+                    <p className="flex min-w-0 items-center gap-2 truncate font-medium">
+                      {safeDrop ? (
+                        <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
+                          Sangria · Cofre
+                        </span>
+                      ) : null}
+                      <span className="truncate">
+                        {t.category}
+                        {t.client_name ? ` · ${t.client_name}` : ""}
+                      </span>
                     </p>
                     <span
-                      className={`shrink-0 font-semibold ${income ? "text-primary" : "text-destructive"}`}
+                      className={`shrink-0 font-semibold ${income ? "text-primary" : safeDrop ? "text-warning" : "text-destructive"}`}
                     >
                       {income ? "+" : "-"}
                       {formatBRL(t.amount)}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {data.unitNames[t.unit_id] ?? "Unidade"} · {t.payment_method ?? "Despesa"} ·{" "}
+                    {data.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
+                    {t.payment_method ?? (safeDrop ? "Transferência para o cofre" : "Despesa")} ·{" "}
                     {data.names[t.user_id] ?? "Usuário"} ·{" "}
                     {new Date(t.created_at).toLocaleString("pt-BR")}
                   </p>
                   {t.description ? (
                     <p className="mt-1 text-sm text-muted-foreground">{t.description}</p>
                   ) : null}
-                  {!t.photo_url ? (
+                  {!t.photo_url && !safeDrop ? (
                     <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
                   ) : null}
                 </div>

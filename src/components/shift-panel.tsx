@@ -6,13 +6,14 @@ import {
   HandCoins,
   ImageIcon,
   Inbox,
+  Landmark,
   LockKeyhole,
   Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
-import { TransactionDialog } from "@/components/transaction-dialog";
+import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
 import { WithdrawalDialog } from "@/components/withdrawal-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,7 +37,7 @@ const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
 export function ShiftPanel({ userId, unitId }: Props) {
   const queryClient = useQueryClient();
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
-  const [txType, setTxType] = useState<"income" | "expense" | null>(null);
+  const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [lastResult, setLastResult] = useState<{ label: string; total: number } | null>(null);
 
@@ -352,6 +353,14 @@ export function ShiftPanel({ userId, unitId }: Props) {
               <Button
                 variant="secondary"
                 className="h-14 w-full text-base"
+                onClick={() => setTxType("safe_drop")}
+              >
+                <Landmark className="size-5" />
+                Fazer Sangria (Cofre)
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-14 w-full text-base"
                 onClick={() => setWithdrawalOpen(true)}
               >
                 <HandCoins className="size-5" />
@@ -433,7 +442,9 @@ export function ShiftPanel({ userId, unitId }: Props) {
                     <p className="truncate text-sm font-medium">
                       {t.transaction_type === "income"
                         ? `${t.category} · ${t.client_name ?? ""}`
-                        : (t.description ?? "Despesa")}
+                        : t.category === "Sangria"
+                          ? `Sangria (cofre)${t.description ? ` · ${t.description}` : ""}`
+                          : (t.description ?? "Despesa")}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {t.payment_method ? `${t.payment_method} · ` : ""}
