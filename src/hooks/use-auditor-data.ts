@@ -10,6 +10,7 @@ export type ShiftRow = {
   expected_opening_total: number;
   actual_opening_total: number;
   closing_total: number | null;
+  expected_closing_total: number | null;
   status: string;
   opened_at: string;
   closed_at: string | null;

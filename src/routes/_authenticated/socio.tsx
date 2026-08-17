@@ -73,6 +73,10 @@ function PartnerDashboard() {
         },
       );
       void queryClient.invalidateQueries({ queryKey: ["partner-withdrawals"] });
+      void queryClient.invalidateQueries({ queryKey: ["shift-withdrawals"] });
+      void queryClient.invalidateQueries({ queryKey: ["shift-transactions"] });
+      void queryClient.invalidateQueries({ queryKey: ["unit-shifts"] });
+      void queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
     },
     onError: (error: Error) => toast.error("Erro ao atualizar", { description: error.message }),
   });

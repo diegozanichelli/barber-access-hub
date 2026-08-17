@@ -1,0 +1,1 @@
+ALTER TABLE public.shifts ADD COLUMN IF NOT EXISTS expected_closing_total numeric;

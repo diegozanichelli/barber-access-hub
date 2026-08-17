@@ -178,6 +178,7 @@ export type Database = {
           closed_by: string | null
           closing_total: number | null
           created_at: string
+          expected_closing_total: number | null
           expected_opening_total: number
           id: string
           opened_at: string
@@ -192,6 +193,7 @@ export type Database = {
           closed_by?: string | null
           closing_total?: number | null
           created_at?: string
+          expected_closing_total?: number | null
           expected_opening_total?: number
           id?: string
           opened_at?: string
@@ -206,6 +208,7 @@ export type Database = {
           closed_by?: string | null
           closing_total?: number | null
           created_at?: string
+          expected_closing_total?: number | null
           expected_opening_total?: number
           id?: string
           opened_at?: string

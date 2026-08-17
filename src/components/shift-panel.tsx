@@ -17,7 +17,7 @@ import { WithdrawalDialog } from "@/components/withdrawal-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
-import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
+import { computeExpectedClosing, computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { getReceiptUrl } from "@/lib/transactions";
 
 type Props = {
@@ -89,10 +89,11 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const runningCash = useMemo(
     () =>
       openShift
-        ? computeRunningCash(openShift.expected_opening_total, transactions ?? [], withdrawals ?? [])
+        ? computeRunningCash(openShift.actual_opening_total, transactions ?? [], withdrawals ?? [])
         : 0,
     [openShift, transactions, withdrawals],
   );
+
 
   function invalidateShift() {
     void queryClient.invalidateQueries({ queryKey: ["unit-shifts"] });
@@ -108,10 +109,12 @@ export function ShiftPanel({ userId, unitId }: Props) {
         .from("shifts")
         .select("closing_total")
         .eq("unit_id", unitId)
+        .eq("status", "closed")
         .not("closing_total", "is", null)
         .order("closed_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
       if (lastError) throw lastError;
 
       const expected = Number(lastClosed?.closing_total ?? 0);
@@ -154,6 +157,13 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!openShift) throw new Error("Nenhum caixa aberto.");
 
+      const expectedClosing = computeExpectedClosing(
+        openShift.actual_opening_total,
+        transactions ?? [],
+        withdrawals ?? [],
+      );
+      const diff = Math.round((payload.total - expectedClosing) * 100) / 100;
+
       const { error: countError } = await supabase.from("cash_counts").insert({
         shift_id: openShift.id,
         count_type: "closing",
@@ -169,25 +179,35 @@ export function ShiftPanel({ userId, unitId }: Props) {
         .update({
           status: "pending_handover",
           closing_total: payload.total,
+          expected_closing_total: expectedClosing,
           closed_by: userId,
           closed_at: new Date().toISOString(),
         })
         .eq("id", openShift.id);
       if (shiftError) throw shiftError;
 
-      return payload.total;
+      return { total: payload.total, expectedClosing, diff };
     },
-    onSuccess: (total) => {
+    onSuccess: ({ total, expectedClosing, diff }) => {
       setCalcMode(null);
       setLastResult({ label: "Turno enviado para repasse com", total });
-      toast.success("Turno aguardando repasse", {
-        description: `Total contado: ${formatBRL(total)}. O próximo atendente deve receber o turno.`,
-      });
+      const detail = `Esperado: ${formatBRL(expectedClosing)} · Contado: ${formatBRL(total)}`;
+      if (Math.abs(diff) < 0.005) {
+        toast.success("Turno aguardando repasse — caixa confere", { description: detail });
+      } else {
+        toast.error(
+          diff > 0
+            ? `Sobra de ${formatBRL(diff)} no fechamento`
+            : `Falta de ${formatBRL(Math.abs(diff))} no fechamento`,
+          { description: `${detail}. A Auditoria foi notificada.`, duration: 10000 },
+        );
+      }
       invalidateShift();
     },
     onError: (error: Error) =>
       toast.error("Erro ao fechar o caixa", { description: error.message }),
   });
+
 
   const handoverMutation = useMutation({
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
@@ -218,7 +238,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
         .insert({
           unit_id: unitId,
           opened_by: userId,
-          expected_opening_total: payload.total,
+          expected_opening_total: expected,
           actual_opening_total: payload.total,
           status: "open",
         })
