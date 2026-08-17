@@ -73,9 +73,29 @@ function AuditorDashboard() {
       eyebrow="Auditor"
       title="Bem-vindo Admin"
       subtitle={profile?.fullName ?? undefined}
+      wide
     >
-      <AuditorOverview />
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Visão geral</TabsTrigger>
+          <TabsTrigger value="feed">Lançamentos</TabsTrigger>
+          <TabsTrigger value="history">Turnos</TabsTrigger>
+          <TabsTrigger value="users">Usuários</TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="overview" className="space-y-4">
+          <AuditorOverview />
+        </TabsContent>
+
+        <TabsContent value="feed">
+          <AuditFeed />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <ShiftHistory />
+        </TabsContent>
+
+        <TabsContent value="users">
       <section className="surface-panel p-5">
         <div className="flex items-center gap-2">
           <Users className="size-5 text-primary" aria-hidden />
