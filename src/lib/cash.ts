@@ -1,4 +1,5 @@
 export type CashField =
+  | "notes_200"
   | "notes_100"
   | "notes_50"
   | "notes_20"
