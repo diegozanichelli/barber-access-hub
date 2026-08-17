@@ -551,7 +551,9 @@ export function ShiftPanel({ userId, unitId }: Props) {
             shiftId={openShift.id}
             unitId={unitId}
             userId={userId}
+            safeBalance={safeBalance}
           />
+
         </>
       ) : null}
     </>
