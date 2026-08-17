@@ -341,13 +341,6 @@ export type Database = {
           unit_id: string
         }[]
       }
-      user_display_names: {
-        Args: { _ids: string[] }
-        Returns: {
-          full_name: string
-          id: string
-        }[]
-      }
     }
     Enums: {
       app_role: "atendente" | "supervisor" | "socio" | "auditor"
