@@ -21,13 +21,13 @@ export const Route = createFileRoute("/auth")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Entrar | Caixa Barber - Auditoria de Caixa" },
+      { title: "Entrar | Caixa Grupo Roots - Auditoria de Caixa" },
       {
         name: "description",
         content:
-          "Acesse o painel de auditoria de caixa da sua rede de barbearias: atendentes, supervisores, sócios e auditores.",
+          "Acesse o painel de auditoria de caixa do Grupo Roots: atendentes, supervisores, sócios e auditores.",
       },
-      { property: "og:title", content: "Entrar | Caixa Barber" },
+      { property: "og:title", content: "Entrar | Caixa Grupo Roots" },
       {
         property: "og:description",
         content: "Login seguro para atendentes, supervisores, sócios e auditores.",
@@ -120,7 +120,7 @@ function AuthPage() {
           <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/15">
             <Scissors className="size-7 text-primary" aria-hidden />
           </div>
-          <h1 className="mt-4 text-4xl">Caixa Barber</h1>
+          <h1 className="mt-4 text-4xl font-bold tracking-tight">Caixa Grupo Roots</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Auditoria de caixa para redes de barbearia
           </p>
