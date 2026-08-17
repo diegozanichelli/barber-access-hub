@@ -30,7 +30,7 @@ export function DashboardShell({ eyebrow, title, subtitle, wide, children }: Pro
       <header className="flex items-center justify-between gap-3 px-4 py-4">
         <div className="flex items-center gap-2">
           <Scissors className="size-5 text-primary" aria-hidden />
-          <span className="font-display text-xl tracking-wide">Caixa Barber</span>
+          <span className="font-display text-xl tracking-wide">Caixa Grupo Roots</span>
         </div>
         <Button variant="ghost" size="sm" onClick={handleSignOut}>
           <LogOut className="size-4" />

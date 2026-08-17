@@ -8,13 +8,13 @@ export const Route = createFileRoute("/")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Caixa Barber | Auditoria de Caixa para Barbearias" },
+      { title: "Caixa Grupo Roots | Auditoria de Caixa para Barbearias" },
       {
         name: "description",
         content:
           "Plataforma de auditoria de caixa para redes de barbearia, com painéis para atendentes, supervisores, sócios e auditores.",
       },
-      { property: "og:title", content: "Caixa Barber | Auditoria de Caixa" },
+      { property: "og:title", content: "Caixa Grupo Roots | Auditoria de Caixa" },
       {
         property: "og:description",
         content: "Controle e auditoria de caixa por unidade, com acesso por perfil.",
@@ -49,7 +49,7 @@ function Index() {
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background">
       <Scissors className="size-8 text-primary" aria-hidden />
       <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
-      <p className="sr-only">Carregando Caixa Barber</p>
+      <p className="sr-only">Carregando Caixa Grupo Roots</p>
     </div>
   );
 }

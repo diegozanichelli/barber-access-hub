@@ -79,13 +79,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Caixa Barber | Auditoria de Caixa para Barbearias" },
+      { title: "Caixa Grupo Roots | Auditoria de Caixa para Barbearias" },
       {
         name: "description",
         content:
           "Auditoria de caixa para redes de barbearia, com acesso por perfil e por unidade.",
       },
-      { property: "og:title", content: "Caixa Barber" },
+      { property: "og:title", content: "Caixa Grupo Roots" },
       { property: "og:description", content: "Auditoria de caixa para redes de barbearia." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

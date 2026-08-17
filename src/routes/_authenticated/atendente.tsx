@@ -6,12 +6,12 @@ import { useSessionProfile } from "@/hooks/use-session-profile";
 export const Route = createFileRoute("/_authenticated/atendente")({
   head: () => ({
     meta: [
-      { title: "Painel do Atendente | Caixa Barber" },
+      { title: "Painel do Atendente | Caixa Grupo Roots" },
       {
         name: "description",
         content: "Abra o caixa, registre entradas e despesas com comprovante na sua unidade.",
       },
-      { property: "og:title", content: "Painel do Atendente | Caixa Barber" },
+      { property: "og:title", content: "Painel do Atendente | Caixa Grupo Roots" },
       {
         property: "og:description",
         content: "Contagem cega de caixa e registro de entradas e despesas com foto.",
