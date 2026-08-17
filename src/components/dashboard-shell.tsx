@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 type Props = {
   eyebrow: string;
   title: string;
-  subtitle?: string;
+  subtitle?: string | undefined;
   children?: ReactNode;
 };
 

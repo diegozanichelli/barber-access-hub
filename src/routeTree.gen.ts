@@ -10,33 +10,95 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedAtendenteRouteImport } from './routes/_authenticated/atendente'
+import { Route as AuthenticatedAuditorRouteImport } from './routes/_authenticated/auditor'
+import { Route as AuthenticatedSocioRouteImport } from './routes/_authenticated/socio'
+import { Route as AuthenticatedSupervisorRouteImport } from './routes/_authenticated/supervisor'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAtendenteRoute = AuthenticatedAtendenteRouteImport.update({
+  id: '/atendente',
+  path: '/atendente',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAuditorRoute = AuthenticatedAuditorRouteImport.update({
+  id: '/auditor',
+  path: '/auditor',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSocioRoute = AuthenticatedSocioRouteImport.update({
+  id: '/socio',
+  path: '/socio',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSupervisorRoute = AuthenticatedSupervisorRouteImport.update({
+  id: '/supervisor',
+  path: '/supervisor',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/atendente': typeof AuthenticatedAtendenteRoute
+  '/auditor': typeof AuthenticatedAuditorRoute
+  '/socio': typeof AuthenticatedSocioRoute
+  '/supervisor': typeof AuthenticatedSupervisorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/atendente': typeof AuthenticatedAtendenteRoute
+  '/auditor': typeof AuthenticatedAuditorRoute
+  '/socio': typeof AuthenticatedSocioRoute
+  '/supervisor': typeof AuthenticatedSupervisorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/atendente': typeof AuthenticatedAtendenteRoute
+  '/_authenticated/auditor': typeof AuthenticatedAuditorRoute
+  '/_authenticated/socio': typeof AuthenticatedSocioRoute
+  '/_authenticated/supervisor': typeof AuthenticatedSupervisorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    '/' | '/auth' | '/atendente' | '/auditor' | '/socio' | '/supervisor'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/auth' | '/atendente' | '/auditor' | '/socio' | '/supervisor'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/atendente'
+    | '/_authenticated/auditor'
+    | '/_authenticated/socio'
+    | '/_authenticated/supervisor'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +110,72 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/atendente': {
+      id: '/_authenticated/atendente'
+      path: '/atendente'
+      fullPath: '/atendente'
+      preLoaderRoute: typeof AuthenticatedAtendenteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/auditor': {
+      id: '/_authenticated/auditor'
+      path: '/auditor'
+      fullPath: '/auditor'
+      preLoaderRoute: typeof AuthenticatedAuditorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/socio': {
+      id: '/_authenticated/socio'
+      path: '/socio'
+      fullPath: '/socio'
+      preLoaderRoute: typeof AuthenticatedSocioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/supervisor': {
+      id: '/_authenticated/supervisor'
+      path: '/supervisor'
+      fullPath: '/supervisor'
+      preLoaderRoute: typeof AuthenticatedSupervisorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAtendenteRoute: typeof AuthenticatedAtendenteRoute
+  AuthenticatedAuditorRoute: typeof AuthenticatedAuditorRoute
+  AuthenticatedSocioRoute: typeof AuthenticatedSocioRoute
+  AuthenticatedSupervisorRoute: typeof AuthenticatedSupervisorRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAtendenteRoute: AuthenticatedAtendenteRoute,
+  AuthenticatedAuditorRoute: AuthenticatedAuditorRoute,
+  AuthenticatedSocioRoute: AuthenticatedSocioRoute,
+  AuthenticatedSupervisorRoute: AuthenticatedSupervisorRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
