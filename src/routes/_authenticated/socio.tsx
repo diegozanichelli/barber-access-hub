@@ -32,10 +32,24 @@ function PartnerDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("partner_withdrawals")
-        .select("*, units ( name ), profiles!partner_withdrawals_created_by_fkey ( full_name )")
+        .select("*, units ( name )")
         .eq("partner_id", profile!.userId)
         .eq("status", "pending")
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const creatorIds = [...new Set((withdrawals ?? []).map((w) => w.created_by))];
+  const { data: creators } = useQuery({
+    queryKey: ["withdrawal-creators", creatorIds.join(",")],
+    enabled: creatorIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", creatorIds);
       if (error) throw error;
       return data ?? [];
     },
@@ -85,7 +99,7 @@ function PartnerDashboard() {
           <ul className="mt-4 space-y-3">
             {(withdrawals ?? []).map((w) => {
               const unit = (w as { units?: { name: string } | null }).units;
-              const author = (w as { profiles?: { full_name: string } | null }).profiles;
+              const author = (creators ?? []).find((c) => c.id === w.created_by);
               return (
                 <li key={w.id} className="rounded-lg border border-border/60 p-4">
                   <p className="text-2xl font-semibold text-primary">{formatBRL(w.amount)}</p>
