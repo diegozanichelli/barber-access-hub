@@ -140,21 +140,43 @@ export function AuditorOverview() {
               </div>
 
               <p className="mt-3 text-xs uppercase tracking-wide text-muted-foreground">
-                Caixa em gaveta
-              </p>
-              <p
-                className={`text-2xl font-semibold ${
-                  c.over ? "text-destructive" : c.active ? "text-primary" : "text-muted-foreground"
-                }`}
-              >
-                {c.active ? formatBRL(c.running) : "—"}
-              </p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Caixa em gaveta
+                  </p>
+                  <p
+                    className={`text-2xl font-semibold ${
+                      c.over
+                        ? "text-destructive"
+                        : c.active
+                          ? "text-primary"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {c.active ? formatBRL(c.running) : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Disponível no cofre
+                  </p>
+                  <p
+                    className={`text-2xl font-semibold ${
+                      c.active && c.safe < 0 ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    {c.active ? formatBRL(c.safe) : "—"}
+                  </p>
+                </div>
+              </div>
               {c.over ? (
                 <p className="mt-1 text-xs font-semibold text-destructive">
                   Acima do limite de R$ 1.000 — solicitar sangria.
                 </p>
               ) : null}
             </article>
+
           ))}
         </div>
       </section>
