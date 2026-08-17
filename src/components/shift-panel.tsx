@@ -89,10 +89,11 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const runningCash = useMemo(
     () =>
       openShift
-        ? computeRunningCash(openShift.expected_opening_total, transactions ?? [], withdrawals ?? [])
+        ? computeRunningCash(openShift.actual_opening_total, transactions ?? [], withdrawals ?? [])
         : 0,
     [openShift, transactions, withdrawals],
   );
+
 
   function invalidateShift() {
     void queryClient.invalidateQueries({ queryKey: ["unit-shifts"] });
