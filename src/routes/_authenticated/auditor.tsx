@@ -8,6 +8,7 @@ import { AuditFeed } from "@/components/audit-feed";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { ShiftHistory } from "@/components/shift-history";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { UnitManager } from "@/components/unit-manager";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -76,12 +77,18 @@ function AuditorDashboard() {
       wide
     >
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="feed">Lançamentos</TabsTrigger>
           <TabsTrigger value="history">Turnos</TabsTrigger>
+          <TabsTrigger value="units">Unidades</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="units">
+          <UnitManager />
+        </TabsContent>
+
 
         <TabsContent value="overview" className="space-y-4">
           <AuditorOverview />
