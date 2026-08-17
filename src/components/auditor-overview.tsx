@@ -1,6 +1,6 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { formatBRL } from "@/lib/cash";
-import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
+import { computeRunningCash, computeSafeBalance, isOverLimit } from "@/lib/running-cash";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
 const STATUS_LABEL: Record<string, string> = {
