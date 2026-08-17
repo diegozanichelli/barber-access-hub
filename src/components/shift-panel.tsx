@@ -155,6 +155,13 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!openShift) throw new Error("Nenhum caixa aberto.");
 
+      const expectedClosing = computeExpectedClosing(
+        openShift.actual_opening_total,
+        transactions ?? [],
+        withdrawals ?? [],
+      );
+      const diff = Math.round((payload.total - expectedClosing) * 100) / 100;
+
       const { error: countError } = await supabase.from("cash_counts").insert({
         shift_id: openShift.id,
         count_type: "closing",
@@ -170,25 +177,35 @@ export function ShiftPanel({ userId, unitId }: Props) {
         .update({
           status: "pending_handover",
           closing_total: payload.total,
+          expected_closing_total: expectedClosing,
           closed_by: userId,
           closed_at: new Date().toISOString(),
         })
         .eq("id", openShift.id);
       if (shiftError) throw shiftError;
 
-      return payload.total;
+      return { total: payload.total, expectedClosing, diff };
     },
-    onSuccess: (total) => {
+    onSuccess: ({ total, expectedClosing, diff }) => {
       setCalcMode(null);
       setLastResult({ label: "Turno enviado para repasse com", total });
-      toast.success("Turno aguardando repasse", {
-        description: `Total contado: ${formatBRL(total)}. O próximo atendente deve receber o turno.`,
-      });
+      const detail = `Esperado: ${formatBRL(expectedClosing)} · Contado: ${formatBRL(total)}`;
+      if (Math.abs(diff) < 0.005) {
+        toast.success("Turno aguardando repasse — caixa confere", { description: detail });
+      } else {
+        toast.error(
+          diff > 0
+            ? `Sobra de ${formatBRL(diff)} no fechamento`
+            : `Falta de ${formatBRL(Math.abs(diff))} no fechamento`,
+          { description: `${detail}. A Auditoria foi notificada.`, duration: 10000 },
+        );
+      }
       invalidateShift();
     },
     onError: (error: Error) =>
       toast.error("Erro ao fechar o caixa", { description: error.message }),
   });
+
 
   const handoverMutation = useMutation({
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
