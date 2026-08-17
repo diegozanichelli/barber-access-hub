@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
+import { AuditorOverview } from "@/components/auditor-overview";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +71,8 @@ function AuditorDashboard() {
       title="Bem-vindo Admin"
       subtitle={profile?.fullName ?? undefined}
     >
+      <AuditorOverview />
+
       <section className="surface-panel p-5">
         <div className="flex items-center gap-2">
           <Users className="size-5 text-primary" aria-hidden />
