@@ -30,6 +30,7 @@ export type Database = {
           notes_100: number
           notes_2: number
           notes_20: number
+          notes_200: number
           notes_5: number
           notes_50: number
           shift_id: string
@@ -50,6 +51,7 @@ export type Database = {
           notes_100?: number
           notes_2?: number
           notes_20?: number
+          notes_200?: number
           notes_5?: number
           notes_50?: number
           shift_id: string
@@ -70,6 +72,7 @@ export type Database = {
           notes_100?: number
           notes_2?: number
           notes_20?: number
+          notes_200?: number
           notes_5?: number
           notes_50?: number
           shift_id?: string
