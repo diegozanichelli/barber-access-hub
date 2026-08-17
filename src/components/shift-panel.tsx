@@ -344,7 +344,14 @@ export function ShiftPanel({ userId, unitId }: Props) {
                   {formatBRL(runningCash)}
                 </dd>
               </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Disponível no cofre</dt>
+                <dd className={safeBalance > 0 ? "font-semibold" : "text-muted-foreground"}>
+                  {formatBRL(safeBalance)}
+                </dd>
+              </div>
             </dl>
+
 
             <div className="mt-4 grid gap-3">
               <Button className="h-14 w-full text-base" onClick={() => setTxType("income")}>
