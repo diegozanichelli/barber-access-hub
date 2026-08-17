@@ -17,7 +17,7 @@ import { WithdrawalDialog } from "@/components/withdrawal-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
-import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
+import { computeExpectedClosing, computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { getReceiptUrl } from "@/lib/transactions";
 
 type Props = {
