@@ -73,7 +73,7 @@ function AuditorDashboard() {
     <DashboardShell
       eyebrow="Auditor"
       title="Bem-vindo Admin"
-      subtitle={profile?.fullName ?? undefined}
+      subtitle={`${profile?.fullName ?? ""} · Acesso a todas as unidades`.trim()}
       wide
     >
       <Tabs defaultValue="overview" className="space-y-4">
