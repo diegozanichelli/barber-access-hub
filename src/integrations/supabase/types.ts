@@ -356,6 +356,7 @@ export type Database = {
         | "Assinatura Nova"
         | "Renovação"
         | "Despesa"
+        | "Sangria"
       withdrawal_status: "pending" | "approved" | "disputed"
     }
     CompositeTypes: {
@@ -491,6 +492,7 @@ export const Constants = {
         "Assinatura Nova",
         "Renovação",
         "Despesa",
+        "Sangria",
       ],
       withdrawal_status: ["pending", "approved", "disputed"],
     },
