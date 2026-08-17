@@ -139,7 +139,6 @@ export function AuditorOverview() {
                 ) : null}
               </div>
 
-              <p className="mt-3 text-xs uppercase tracking-wide text-muted-foreground">
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
