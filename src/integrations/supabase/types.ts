@@ -170,6 +170,66 @@ export type Database = {
           },
         ]
       }
+      transactions: {
+        Row: {
+          amount: number
+          category: Database["public"]["Enums"]["transaction_category"]
+          client_name: string | null
+          created_at: string
+          description: string | null
+          id: string
+          payment_method: Database["public"]["Enums"]["payment_method"] | null
+          photo_url: string | null
+          shift_id: string
+          transaction_type: string
+          unit_id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: Database["public"]["Enums"]["transaction_category"]
+          client_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          photo_url?: string | null
+          shift_id: string
+          transaction_type: string
+          unit_id: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: Database["public"]["Enums"]["transaction_category"]
+          client_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          photo_url?: string | null
+          shift_id?: string
+          transaction_type?: string
+          unit_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       units: {
         Row: {
           created_at: string
@@ -225,6 +285,12 @@ export type Database = {
     }
     Enums: {
       app_role: "atendente" | "supervisor" | "socio" | "auditor"
+      payment_method: "Pix" | "Crédito" | "Débito" | "Dinheiro"
+      transaction_category:
+        | "Bebida"
+        | "Assinatura Nova"
+        | "Renovação"
+        | "Despesa"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -353,6 +419,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["atendente", "supervisor", "socio", "auditor"],
+      payment_method: ["Pix", "Crédito", "Débito", "Dinheiro"],
+      transaction_category: [
+        "Bebida",
+        "Assinatura Nova",
+        "Renovação",
+        "Despesa",
+      ],
     },
   },
 } as const
