@@ -38,7 +38,7 @@ export function DashboardShell({ eyebrow, title, subtitle, wide, children }: Pro
         </Button>
       </header>
 
-      <main className="mx-auto w-full max-w-md px-4 pb-16">
+      <main className={`mx-auto w-full px-4 pb-16 ${wide ? "max-w-5xl" : "max-w-md"}`}>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">{eyebrow}</p>
         <h1 className="mt-2 text-3xl leading-tight">{title}</h1>
         {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
