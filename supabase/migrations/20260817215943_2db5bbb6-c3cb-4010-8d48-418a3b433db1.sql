@@ -1,0 +1,1 @@
+ALTER TABLE public.cash_counts ADD COLUMN notes_200 integer NOT NULL DEFAULT 0;
