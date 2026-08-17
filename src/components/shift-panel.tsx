@@ -377,11 +377,18 @@ export function ShiftPanel({ userId, unitId }: Props) {
               <Button
                 variant="secondary"
                 className="h-14 w-full text-base"
+                disabled={safeBalance <= 0}
                 onClick={() => setWithdrawalOpen(true)}
               >
                 <HandCoins className="size-5" />
                 Retirada de Sócio
               </Button>
+              {safeBalance <= 0 ? (
+                <p className="-mt-1 text-xs text-muted-foreground">
+                  Faça uma sangria para o cofre antes de registrar uma retirada de sócio.
+                </p>
+              ) : null}
+
               <Button variant="outline" className="h-12 w-full" onClick={() => setCalcMode("closing")}>
                 <LockKeyhole className="size-4" />
                 Fechar Caixa
