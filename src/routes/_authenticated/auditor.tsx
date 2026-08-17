@@ -157,24 +157,30 @@ function AuditorDashboard() {
                       </SelectContent>
                     </Select>
 
-                    <Select
-                      value={draft.unitId}
-                      onValueChange={(unitId) =>
-                        setDrafts((p) => ({ ...p, [user.id]: { ...draft, unitId } }))
-                      }
-                    >
-                      <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
-                        <SelectValue placeholder="Unidade" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_UNIT}>Sem unidade</SelectItem>
-                        {(units ?? []).map((u) => (
-                          <SelectItem key={u.id} value={u.id}>
-                            {u.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {draft.role === "auditor" ? (
+                      <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                        Acesso a todas as unidades
+                      </div>
+                    ) : (
+                      <Select
+                        value={draft.unitId}
+                        onValueChange={(unitId) =>
+                          setDrafts((p) => ({ ...p, [user.id]: { ...draft, unitId } }))
+                        }
+                      >
+                        <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
+                          <SelectValue placeholder="Unidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_UNIT}>Sem unidade</SelectItem>
+                          {(units ?? []).map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
 
                     <Button
                       size="sm"
