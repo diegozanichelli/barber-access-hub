@@ -76,12 +76,18 @@ function AuditorDashboard() {
       wide
     >
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="feed">Lançamentos</TabsTrigger>
           <TabsTrigger value="history">Turnos</TabsTrigger>
+          <TabsTrigger value="units">Unidades</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="units">
+          <UnitManager />
+        </TabsContent>
+
 
         <TabsContent value="overview" className="space-y-4">
           <AuditorOverview />
