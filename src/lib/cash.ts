@@ -13,6 +13,7 @@ export type CashField =
   | "coins_005";
 
 export const DENOMINATIONS: { field: CashField; label: string; value: number }[] = [
+  { field: "notes_200", label: "Notas de R$ 200", value: 200 },
   { field: "notes_100", label: "Notas de R$ 100", value: 100 },
   { field: "notes_50", label: "Notas de R$ 50", value: 50 },
   { field: "notes_20", label: "Notas de R$ 20", value: 20 },
