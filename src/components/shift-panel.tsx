@@ -88,12 +88,15 @@ export function ShiftPanel({ userId, unitId }: Props) {
   });
 
   const runningCash = useMemo(
-    () =>
-      openShift
-        ? computeRunningCash(openShift.actual_opening_total, transactions ?? [], withdrawals ?? [])
-        : 0,
+    () => (openShift ? computeRunningCash(openShift.actual_opening_total, transactions ?? []) : 0),
+    [openShift, transactions],
+  );
+
+  const safeBalance = useMemo(
+    () => (openShift ? computeSafeBalance(transactions ?? [], withdrawals ?? []) : 0),
     [openShift, transactions, withdrawals],
   );
+
 
 
   function invalidateShift() {
