@@ -1,24 +1,55 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Loader2, Scissors } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { ROLE_ROUTES, type AppRole } from "@/lib/roles";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
+  ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Caixa Barber | Auditoria de Caixa para Barbearias" },
+      {
+        name: "description",
+        content:
+          "Plataforma de auditoria de caixa para redes de barbearia, com painéis para atendentes, supervisores, sócios e auditores.",
+      },
+      { property: "og:title", content: "Caixa Barber | Auditoria de Caixa" },
+      {
+        property: "og:description",
+        content: "Controle e auditoria de caixa por unidade, com acesso por perfil.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) {
+        navigate({ to: "/auth", replace: true });
+        return;
+      }
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.user.id);
+      const role = roles?.[0]?.role as AppRole | undefined;
+      navigate({ to: role ? ROLE_ROUTES[role] : "/atendente", replace: true });
+    })();
+  }, [navigate]);
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background">
+      <Scissors className="size-8 text-primary" aria-hidden />
+      <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
+      <p className="sr-only">Carregando Caixa Barber</p>
     </div>
   );
 }
