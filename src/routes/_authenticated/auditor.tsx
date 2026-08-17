@@ -8,6 +8,7 @@ import { AuditFeed } from "@/components/audit-feed";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { ShiftHistory } from "@/components/shift-history";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { UnitManager } from "@/components/unit-manager";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
