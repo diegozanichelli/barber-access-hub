@@ -68,19 +68,21 @@ export function classifyAuthenticatedAccess(
 
 /** Single source of truth for post-authentication access and routing. */
 export async function resolveAccessState(): Promise<AccessState> {
-  const { data: userData, error: userError } = await withAccessTimeout(supabase.auth.getUser());
-  if (userError) throw userError;
-  if (!userData.user) return { kind: "anonymous" };
+  // Routing starts from the locally persisted session. `getUser()` returns an
+  // AuthSessionMissingError for a normal signed-out visitor, which previously
+  // turned the home page into an error screen instead of opening the login.
+  // PostgreSQL RLS and authenticated RPCs remain the authorization boundary.
+  const { data: sessionData, error: sessionError } = await withAccessTimeout(
+    supabase.auth.getSession(),
+  );
+  if (sessionError || !sessionData.session?.user) return { kind: "anonymous" };
+  const user = sessionData.session.user;
 
   const [{ data: profile, error: profileError }, { data: roles, error: rolesError }] =
     await withAccessTimeout(
       Promise.all([
-        supabase
-          .from("profiles")
-          .select("status, requested_role")
-          .eq("id", userData.user.id)
-          .maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", userData.user.id),
+        supabase.from("profiles").select("status, requested_role").eq("id", user.id).maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", user.id),
       ]),
     );
 
