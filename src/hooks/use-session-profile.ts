@@ -39,6 +39,7 @@ export function useSessionProfile() {
         role: (roles?.[0]?.role as AppRole | undefined) ?? null,
         unitName: unit?.name ?? null,
         unitId: profile?.unit_id ?? null,
+        status: (profile?.status as SessionProfile["status"] | undefined) ?? "approved",
       };
     },
   });
