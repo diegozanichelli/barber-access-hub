@@ -101,12 +101,12 @@ function AuthPage() {
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { full_name: fullName, unit_id: unitId || null },
+        data: { full_name: fullName, unit_id: unitId || null, role: requestedRole },
       },
     });
     setLoading(false);
@@ -114,13 +114,10 @@ function AuthPage() {
       toast.error("Não foi possível criar a conta", { description: error.message });
       return;
     }
-    if (!data.session) {
-      toast.success("Conta criada", {
-        description: "Confirme seu e-mail para acessar o painel.",
-      });
-      return;
-    }
-    navigate({ to: "/atendente", replace: true });
+    toast.success("Cadastro enviado", {
+      description: "Aguarde a aprovação do administrador para acessar o painel.",
+    });
+    navigate({ to: "/pendente", replace: true });
   }
 
   return (
