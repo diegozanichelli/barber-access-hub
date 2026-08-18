@@ -358,6 +358,16 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0,00"
                 />
+                {Number.isFinite(expenseValue) && expenseValue > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Valor que será registrado: {formatBRL(expenseValue)}
+                  </p>
+                ) : amount.trim() !== "" ? (
+                  <p className="text-xs font-semibold text-destructive">
+                    Valor inválido. Use vírgula para os centavos (ex: 37,97).
+                  </p>
+                ) : null}
+
                 {showRoundWarning ? (
                   <p className="rounded-lg border border-warning/60 bg-warning/15 p-3 text-xs font-semibold text-warning-foreground">
                     ⚠️ Atenção: O valor é redondo mesmo? Digite os centavos exatos que estão no
