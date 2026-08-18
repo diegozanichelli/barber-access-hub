@@ -93,7 +93,7 @@ function AuthPage() {
       toast.error("Não foi possível entrar", { description: error.message });
       return;
     }
-    const to = (await routeForCurrentUser()) ?? "/atendente";
+    const to = (await routeForCurrentUser()) ?? "/pendente";
     setLoading(false);
     navigate({ to, replace: true });
   }
