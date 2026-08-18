@@ -23,24 +23,16 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
 import { parseAmount } from "@/lib/transactions";
+import { friendlyError } from "@/lib/errors";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   shiftId: string;
-  unitId: string;
-  userId: string;
   safeBalance: number;
 };
 
-export function WithdrawalDialog({
-  open,
-  onOpenChange,
-  shiftId,
-  unitId,
-  userId,
-  safeBalance,
-}: Props) {
+export function WithdrawalDialog({ open, onOpenChange, shiftId, safeBalance }: Props) {
   const queryClient = useQueryClient();
   const [partnerId, setPartnerId] = useState("");
   const [amount, setAmount] = useState("");
@@ -58,13 +50,10 @@ export function WithdrawalDialog({
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("partner_withdrawals").insert({
-        shift_id: shiftId,
-        unit_id: unitId,
-        partner_id: partnerId,
-        created_by: userId,
-        amount: value,
-        status: "pending",
+      const { error } = await supabase.rpc("create_partner_withdrawal", {
+        _shift_id: shiftId,
+        _partner_id: partnerId,
+        _amount: value,
       });
       if (error) throw error;
     },
@@ -74,10 +63,11 @@ export function WithdrawalDialog({
       setAmount("");
       onOpenChange(false);
       void queryClient.invalidateQueries({ queryKey: ["shift-withdrawals"] });
+      void queryClient.invalidateQueries({ queryKey: ["unit-safe-balance"] });
       void queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
     },
     onError: (error: Error) =>
-      toast.error("Erro ao registrar retirada", { description: error.message }),
+      toast.error("Erro ao registrar retirada", { description: friendlyError(error) }),
   });
 
   const exceedsSafe = Number.isFinite(value) && value > safeBalance;

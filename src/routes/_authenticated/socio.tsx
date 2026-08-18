@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, X } from "lucide-react";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useSessionProfile } from "@/hooks/use-session-profile";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
+import { friendlyError } from "@/lib/errors";
 
 export const Route = createFileRoute("/_authenticated/socio")({
   head: () => ({
@@ -25,6 +27,23 @@ export const Route = createFileRoute("/_authenticated/socio")({
 function PartnerDashboard() {
   const { data: profile, isLoading } = useSessionProfile();
   const queryClient = useQueryClient();
+  const [disputeId, setDisputeId] = useState<string | null>(null);
+
+  const { data: history, isLoading: loadingHistory } = useQuery({
+    queryKey: ["partner-withdrawal-history", profile?.userId],
+    enabled: !!profile?.userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("partner_withdrawals")
+        .select("*, units ( name )")
+        .eq("partner_id", profile!.userId)
+        .neq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const { data: withdrawals, isLoading: loadingWithdrawals } = useQuery({
     queryKey: ["partner-withdrawals", profile?.userId],
@@ -78,7 +97,8 @@ function PartnerDashboard() {
       void queryClient.invalidateQueries({ queryKey: ["unit-shifts"] });
       void queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
     },
-    onError: (error: Error) => toast.error("Erro ao atualizar", { description: error.message }),
+    onError: (error: Error) =>
+      toast.error("Erro ao atualizar", { description: friendlyError(error) }),
   });
 
   return (
@@ -125,12 +145,69 @@ function PartnerDashboard() {
                       variant="destructive"
                       className="h-12"
                       disabled={mutation.isPending}
-                      onClick={() => mutation.mutate({ id: w.id, status: "disputed" })}
+                      onClick={() => {
+                        if (disputeId !== w.id) {
+                          setDisputeId(w.id);
+                          return;
+                        }
+                        setDisputeId(null);
+                        mutation.mutate({ id: w.id, status: "disputed" });
+                      }}
                     >
                       <X className="size-4" />
-                      Contestar
+                      {disputeId === w.id ? "Confirmar contestação" : "Contestar"}
                     </Button>
                   </div>
+                  {disputeId === w.id ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Contestar aciona a Auditoria. Toque de novo para confirmar ou{" "}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => setDisputeId(null)}
+                      >
+                        cancelar
+                      </button>
+                      .
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="surface-panel p-5">
+        <h2 className="text-lg">Histórico de retiradas</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Suas últimas retiradas já confirmadas ou contestadas.
+        </p>
+        {loadingHistory ? (
+          <div className="mt-6 flex justify-center">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (history ?? []).length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">Nenhuma retirada registrada ainda.</p>
+        ) : (
+          <ul className="mt-4 divide-y divide-border/60">
+            {(history ?? []).map((w) => {
+              const unit = (w as { units?: { name: string } | null }).units;
+              return (
+                <li key={w.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{formatBRL(w.amount)}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {unit?.name ?? "Unidade"} · {new Date(w.created_at).toLocaleString("pt-BR")}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 text-xs font-semibold ${
+                      w.status === "disputed" ? "text-destructive" : "text-primary"
+                    }`}
+                  >
+                    {w.status === "disputed" ? "Contestada" : "Confirmada"}
+                  </span>
                 </li>
               );
             })}

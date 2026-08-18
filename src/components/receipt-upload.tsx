@@ -54,7 +54,11 @@ export function ReceiptUpload({ file, onChange, required, label = "Foto do compr
 
       {preview ? (
         <div className="relative overflow-hidden rounded-lg border border-border">
-          <img src={preview} alt="Pré-visualização do comprovante" className="h-40 w-full object-cover" />
+          <img
+            src={preview}
+            alt="Pré-visualização do comprovante"
+            className="h-40 w-full object-cover"
+          />
           <Button
             type="button"
             size="icon"

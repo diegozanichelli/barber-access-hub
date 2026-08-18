@@ -40,13 +40,11 @@ export function AuditorOverview() {
         )
       : 0;
 
-    const safe = active
-      ? computeSafeBalance(
-          data.transactions.filter((t) => t.shift_id === active.id),
-          data.withdrawals.filter((w) => w.shift_id === active.id),
-        )
-      : 0;
-
+    // O cofre é acumulado por unidade: soma todas as sangrias e retiradas da unidade.
+    const safe = computeSafeBalance(
+      data.transactions.filter((t) => t.unit_id === unit.id),
+      data.withdrawals.filter((w) => w.unit_id === unit.id),
+    );
 
     return {
       unit,
@@ -57,7 +55,6 @@ export function AuditorOverview() {
       over: Boolean(active) && isOverLimit(running),
       openedBy: active ? (data.names[active.opened_by] ?? "Usuário") : null,
     };
-
   });
 
   const overLimit = cards.filter((c) => c.over);
@@ -158,14 +155,14 @@ export function AuditorOverview() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Disponível no cofre
+                    Cofre da unidade
                   </p>
                   <p
                     className={`text-2xl font-semibold ${
-                      c.active && c.safe < 0 ? "text-destructive" : "text-muted-foreground"
+                      c.safe < 0 ? "text-destructive" : "text-muted-foreground"
                     }`}
                   >
-                    {c.active ? formatBRL(c.safe) : "—"}
+                    {formatBRL(c.safe)}
                   </p>
                 </div>
               </div>
@@ -175,7 +172,6 @@ export function AuditorOverview() {
                 </p>
               ) : null}
             </article>
-
           ))}
         </div>
       </section>

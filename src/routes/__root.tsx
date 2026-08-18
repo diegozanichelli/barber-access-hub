@@ -82,8 +82,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Caixa Grupo Roots | Auditoria de Caixa para Barbearias" },
       {
         name: "description",
-        content:
-          "Auditoria de caixa para redes de barbearia, com acesso por perfil e por unidade.",
+        content: "Auditoria de caixa para redes de barbearia, com acesso por perfil e por unidade.",
       },
       { property: "og:title", content: "Caixa Grupo Roots" },
       { property: "og:description", content: "Auditoria de caixa para redes de barbearia." },

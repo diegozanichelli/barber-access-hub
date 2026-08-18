@@ -23,6 +23,7 @@ import {
 import { ReceiptUpload } from "@/components/receipt-upload";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
+import { friendlyError } from "@/lib/errors";
 import {
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
@@ -95,6 +96,13 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         const rows = parsedPayments.filter((p) => p.method !== "" || p.amount.trim() !== "");
         if (rows.length === 0) throw new Error("Informe ao menos uma forma de pagamento.");
 
+        const methods = rows.map((p) => p.method);
+        if (new Set(methods).size !== methods.length) {
+          throw new Error(
+            "Você repetiu a mesma forma de pagamento. Some os valores em uma única linha.",
+          );
+        }
+
         const parsedRows = rows.map((p) => {
           const parsed = incomeSchema.safeParse({
             category,
@@ -102,7 +110,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
             amount: p.value,
             paymentMethod: p.method,
           });
-          if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
+          if (!parsed.success)
+            throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
           return parsed.data;
         });
 
@@ -180,7 +189,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
       reset();
       onOpenChange(false);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setError(friendlyError(err)),
   });
 
   const blocked = photoRequired && !file;
@@ -263,9 +272,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                           size="icon"
                           variant="ghost"
                           aria-label={`Remover pagamento ${index + 1}`}
-                          onClick={() =>
-                            setPayments((prev) => prev.filter((p) => p.id !== row.id))
-                          }
+                          onClick={() => setPayments((prev) => prev.filter((p) => p.id !== row.id))}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -282,7 +289,10 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                           )
                         }
                       >
-                        <SelectTrigger className="h-12" aria-label={`Forma de pagamento ${index + 1}`}>
+                        <SelectTrigger
+                          className="h-12"
+                          aria-label={`Forma de pagamento ${index + 1}`}
+                        >
                           <SelectValue placeholder="Forma de pagamento" />
                         </SelectTrigger>
                         <SelectContent>
@@ -348,6 +358,16 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0,00"
                 />
+                {Number.isFinite(expenseValue) && expenseValue > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Valor que será registrado: {formatBRL(expenseValue)}
+                  </p>
+                ) : amount.trim() !== "" ? (
+                  <p className="text-xs font-semibold text-destructive">
+                    Valor inválido. Use vírgula para os centavos (ex: 37,97).
+                  </p>
+                ) : null}
+
                 {showRoundWarning ? (
                   <p className="rounded-lg border border-warning/60 bg-warning/15 p-3 text-xs font-semibold text-warning-foreground">
                     ⚠️ Atenção: O valor é redondo mesmo? Digite os centavos exatos que estão no

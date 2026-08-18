@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ArrowDownCircle,
   ArrowUpCircle,
   HandCoins,
   ImageIcon,
   Inbox,
   Landmark,
+  Loader2,
   LockKeyhole,
+  RefreshCw,
   Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -18,12 +21,8 @@ import { WithdrawalDialog } from "@/components/withdrawal-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
-import {
-  computeExpectedClosing,
-  computeRunningCash,
-  computeSafeBalance,
-  isOverLimit,
-} from "@/lib/running-cash";
+import { friendlyError } from "@/lib/errors";
+import { computeExpectedClosing, computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
 
@@ -45,9 +44,10 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const [lastResult, setLastResult] = useState<{ label: string; total: number } | null>(null);
 
-  const { data: shifts } = useQuery({
+  const shiftsQuery = useQuery({
     queryKey: ["unit-shifts", unitId],
     enabled: !!unitId,
     queryFn: async () => {
@@ -62,6 +62,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
     },
   });
 
+  const shifts = shiftsQuery.data;
   const openShift = (shifts ?? []).find((s) => s.status === "open") ?? null;
   const pendingShift = (shifts ?? []).find((s) => s.status === "pending_handover") ?? null;
 
@@ -93,65 +94,40 @@ export function ShiftPanel({ userId, unitId }: Props) {
     },
   });
 
+  /** Saldo do cofre é acumulado por unidade — não zera a cada turno. */
+  const { data: safeBalance = 0 } = useQuery({
+    queryKey: ["unit-safe-balance", unitId],
+    enabled: !!unitId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("unit_safe_balance", { _unit_id: unitId! });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+  });
+
   const runningCash = useMemo(
     () => (openShift ? computeRunningCash(openShift.actual_opening_total, transactions ?? []) : 0),
     [openShift, transactions],
   );
 
-  const safeBalance = useMemo(
-    () => (openShift ? computeSafeBalance(transactions ?? [], withdrawals ?? []) : 0),
-    [openShift, transactions, withdrawals],
-  );
-
-
-
   function invalidateShift() {
     void queryClient.invalidateQueries({ queryKey: ["unit-shifts"] });
     void queryClient.invalidateQueries({ queryKey: ["shift-transactions"] });
     void queryClient.invalidateQueries({ queryKey: ["shift-withdrawals"] });
+    void queryClient.invalidateQueries({ queryKey: ["unit-safe-balance"] });
+    void queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
   }
 
   const openMutation = useMutation({
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!unitId) throw new Error("Você não está atribuído a uma unidade.");
-
-      const { data: lastClosed, error: lastError } = await supabase
-        .from("shifts")
-        .select("closing_total")
-        .eq("unit_id", unitId)
-        .eq("status", "closed")
-        .not("closing_total", "is", null)
-        .order("closed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (lastError) throw lastError;
-
-      const expected = Number(lastClosed?.closing_total ?? 0);
-
-      const { data: shift, error: shiftError } = await supabase
-        .from("shifts")
-        .insert({
-          unit_id: unitId,
-          opened_by: userId,
-          expected_opening_total: expected,
-          actual_opening_total: payload.total,
-          status: "open",
-        })
-        .select()
-        .single();
-      if (shiftError) throw shiftError;
-
-      const { error: countError } = await supabase.from("cash_counts").insert({
-        shift_id: shift.id,
-        count_type: "opening",
-        counted_by: userId,
-        ...payload.quantities,
-        total_calculated: payload.total,
-        notes: payload.notes || null,
+      const { error } = await supabase.rpc("open_shift", {
+        _unit_id: unitId,
+        _quantities: payload.quantities,
+        _total: payload.total,
+        ...(payload.notes ? { _notes: payload.notes } : {}),
       });
-      if (countError) throw countError;
-
+      if (error) throw error;
       return payload.total;
     },
     onSuccess: (total) => {
@@ -160,7 +136,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
       toast.success("Caixa aberto", { description: `Total contado: ${formatBRL(total)}` });
       invalidateShift();
     },
-    onError: (error: Error) => toast.error("Erro ao abrir o caixa", { description: error.message }),
+    onError: (error: Error) =>
+      toast.error("Erro ao abrir o caixa", { description: friendlyError(error) }),
   });
 
   const closeMutation = useMutation({
@@ -172,34 +149,21 @@ export function ShiftPanel({ userId, unitId }: Props) {
         transactions ?? [],
       );
 
-      const diff = Math.round((payload.total - expectedClosing) * 100) / 100;
-
-      const { error: countError } = await supabase.from("cash_counts").insert({
-        shift_id: openShift.id,
-        count_type: "closing",
-        counted_by: userId,
-        ...payload.quantities,
-        total_calculated: payload.total,
-        notes: payload.notes || null,
+      const { error } = await supabase.rpc("close_shift", {
+        _shift_id: openShift.id,
+        _quantities: payload.quantities,
+        _total: payload.total,
+        _expected_closing: expectedClosing,
+        ...(payload.notes ? { _notes: payload.notes } : {}),
       });
-      if (countError) throw countError;
+      if (error) throw error;
 
-      const { error: shiftError } = await supabase
-        .from("shifts")
-        .update({
-          status: "pending_handover",
-          closing_total: payload.total,
-          expected_closing_total: expectedClosing,
-          closed_by: userId,
-          closed_at: new Date().toISOString(),
-        })
-        .eq("id", openShift.id);
-      if (shiftError) throw shiftError;
-
+      const diff = Math.round((payload.total - expectedClosing) * 100) / 100;
       return { total: payload.total, expectedClosing, diff };
     },
     onSuccess: ({ total, expectedClosing, diff }) => {
       setCalcMode(null);
+      setConfirmClose(false);
       setLastResult({ label: "Turno enviado para repasse com", total });
       const detail = `Esperado: ${formatBRL(expectedClosing)} · Contado: ${formatBRL(total)}`;
       if (Math.abs(diff) < 0.005) {
@@ -215,64 +179,35 @@ export function ShiftPanel({ userId, unitId }: Props) {
       invalidateShift();
     },
     onError: (error: Error) =>
-      toast.error("Erro ao fechar o caixa", { description: error.message }),
+      toast.error("Erro ao fechar o caixa", { description: friendlyError(error) }),
   });
-
 
   const handoverMutation = useMutation({
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
-      if (!unitId) throw new Error("Você não está atribuído a uma unidade.");
       if (!pendingShift) throw new Error("Nenhum turno pendente de repasse.");
 
-      const expected = Number(pendingShift.closing_total ?? 0);
-      const matches = Math.abs(expected - payload.total) < 0.005;
-
-      const { error: countError } = await supabase.from("cash_counts").insert({
-        shift_id: pendingShift.id,
-        count_type: "handover",
-        counted_by: userId,
-        ...payload.quantities,
-        total_calculated: payload.total,
-        notes: payload.notes || null,
+      const { data, error } = await supabase.rpc("receive_handover", {
+        _pending_shift_id: pendingShift.id,
+        _quantities: payload.quantities,
+        _total: payload.total,
+        ...(payload.notes ? { _notes: payload.notes } : {}),
       });
-      if (countError) throw countError;
+      if (error) throw error;
 
-      const { error: prevError } = await supabase
-        .from("shifts")
-        .update({ status: matches ? "closed" : "disputed" })
-        .eq("id", pendingShift.id);
-      if (prevError) throw prevError;
-
-      const { data: shift, error: shiftError } = await supabase
-        .from("shifts")
-        .insert({
-          unit_id: unitId,
-          opened_by: userId,
-          expected_opening_total: expected,
-          actual_opening_total: payload.total,
-          status: "open",
-        })
-        .select()
-        .single();
-      if (shiftError) throw shiftError;
-
-      const { error: openCountError } = await supabase.from("cash_counts").insert({
-        shift_id: shift.id,
-        count_type: "opening",
-        counted_by: userId,
-        ...payload.quantities,
-        total_calculated: payload.total,
-        notes: payload.notes || null,
-      });
-      if (openCountError) throw openCountError;
-
-      return { total: payload.total, matches, expected };
+      const result = (data ?? {}) as { matches?: boolean; expected?: number };
+      return {
+        total: payload.total,
+        matches: Boolean(result.matches),
+        expected: Number(result.expected ?? 0),
+      };
     },
     onSuccess: ({ total, matches, expected }) => {
       setCalcMode(null);
       setLastResult({ label: "Turno recebido com", total });
       if (matches) {
-        toast.success("Repasse confirmado", { description: `Total conferido: ${formatBRL(total)}` });
+        toast.success("Repasse confirmado", {
+          description: `Total conferido: ${formatBRL(total)}`,
+        });
       } else {
         toast.error("Divergência detectada! A Auditoria foi notificada.", {
           description: `Repassado: ${formatBRL(expected)} · Contado: ${formatBRL(total)}`,
@@ -282,7 +217,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
       invalidateShift();
     },
     onError: (error: Error) =>
-      toast.error("Erro ao receber o turno", { description: error.message }),
+      toast.error("Erro ao receber o turno", { description: friendlyError(error) }),
   });
 
   async function openReceipt(path: string) {
@@ -302,11 +237,39 @@ export function ShiftPanel({ userId, unitId }: Props) {
     );
   }
 
+  if (shiftsQuery.isLoading) {
+    return (
+      <section className="surface-panel flex items-center justify-center gap-2 p-8">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Carregando o turno da unidade...</span>
+      </section>
+    );
+  }
+
+  if (shiftsQuery.isError) {
+    return (
+      <section className="surface-panel p-5">
+        <div className="flex items-start gap-2 text-destructive">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden />
+          <div>
+            <h2 className="text-lg font-semibold">Não foi possível carregar o turno</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {friendlyError(shiftsQuery.error)} Não abra um novo caixa antes de conseguir carregar
+              esta tela — pode haver um turno já aberto.
+            </p>
+          </div>
+        </div>
+        <Button className="mt-4 h-12 w-full" onClick={() => void shiftsQuery.refetch()}>
+          <RefreshCw className="size-4" />
+          Tentar de novo
+        </Button>
+      </section>
+    );
+  }
+
   return (
     <>
-      {openShift && isOverLimit(runningCash) ? (
-        <CashLimitBanner runningCash={runningCash} />
-      ) : null}
+      {openShift && isOverLimit(runningCash) ? <CashLimitBanner runningCash={runningCash} /> : null}
 
       {lastResult ? (
         <section className="surface-panel p-5">
@@ -345,13 +308,12 @@ export function ShiftPanel({ userId, unitId }: Props) {
                 </dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-muted-foreground">Disponível no cofre</dt>
+                <dt className="text-muted-foreground">Cofre da unidade (acumulado)</dt>
                 <dd className={safeBalance > 0 ? "font-semibold" : "text-muted-foreground"}>
                   {formatBRL(safeBalance)}
                 </dd>
               </div>
             </dl>
-
 
             <div className="mt-4 grid gap-3">
               <Button className="h-14 w-full text-base" onClick={() => setTxType("income")}>
@@ -389,10 +351,33 @@ export function ShiftPanel({ userId, unitId }: Props) {
                 </p>
               ) : null}
 
-              <Button variant="outline" className="h-12 w-full" onClick={() => setCalcMode("closing")}>
+              <Button
+                variant={confirmClose ? "destructive" : "outline"}
+                className="h-12 w-full"
+                onClick={() => {
+                  if (!confirmClose) {
+                    setConfirmClose(true);
+                    return;
+                  }
+                  setConfirmClose(false);
+                  setCalcMode("closing");
+                }}
+              >
                 <LockKeyhole className="size-4" />
-                Fechar Caixa
+                {confirmClose ? "Confirmar: fechar o caixa agora" : "Fechar Caixa"}
               </Button>
+              {confirmClose ? (
+                <p className="-mt-1 text-xs text-muted-foreground">
+                  Depois de fechar não é possível registrar mais lançamentos neste turno.{" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => setConfirmClose(false)}
+                  >
+                    Cancelar
+                  </button>
+                </p>
+              ) : null}
             </div>
           </>
         ) : pendingShift ? (
@@ -402,7 +387,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
               receber o caixa.
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Fechado em {new Date(pendingShift.closed_at ?? pendingShift.opened_at).toLocaleString("pt-BR")}
+              Fechado em{" "}
+              {new Date(pendingShift.closed_at ?? pendingShift.opened_at).toLocaleString("pt-BR")}
             </p>
             <Button className="mt-4 h-14 w-full text-base" onClick={() => setCalcMode("handover")}>
               <Inbox className="size-5" />
@@ -433,6 +419,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
+                    {w.note ? ` · ${w.note}` : ""}
                   </p>
                 </div>
                 <span
@@ -459,48 +446,55 @@ export function ShiftPanel({ userId, unitId }: Props) {
             <p className="mt-1 text-sm text-muted-foreground">Nenhuma movimentação registrada.</p>
           ) : (
             <ul className="mt-3 divide-y divide-border/60">
-              {(transactions ?? []).map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {t.transaction_type === "income"
-                        ? `${t.category} · ${t.client_name ?? ""}`
-                        : t.category === "Sangria"
-                          ? `Sangria (cofre)${t.description ? ` · ${t.description}` : ""}`
-                          : (t.description ?? "Despesa")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {t.payment_method ? `${t.payment_method} · ` : ""}
-                      {new Date(t.created_at).toLocaleTimeString("pt-BR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {t.photo_url ? (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label="Ver comprovante"
-                        onClick={() => void openReceipt(t.photo_url!)}
+              {(transactions ?? []).map((t) => {
+                const isReversal = Boolean(t.reverses_transaction_id);
+                const reversed = Boolean(t.reversed_at);
+                return (
+                  <li key={t.id} className="flex items-center justify-between gap-3 py-3">
+                    <div className="min-w-0">
+                      <p
+                        className={`truncate text-sm font-medium ${reversed ? "text-muted-foreground line-through" : ""}`}
                       >
-                        <ImageIcon className="size-4" />
-                      </Button>
-                    ) : null}
-                    <span
-                      className={
-                        t.transaction_type === "income"
-                          ? "text-sm font-semibold text-primary"
-                          : "text-sm font-semibold text-destructive"
-                      }
-                    >
-                      {t.transaction_type === "income" ? "+" : "-"}
-                      {formatBRL(t.amount)}
-                    </span>
-                  </div>
-                </li>
-              ))}
+                        {t.transaction_type === "income"
+                          ? `${t.category} · ${t.client_name ?? ""}`
+                          : t.category === "Sangria"
+                            ? `Sangria (cofre)${t.description ? ` · ${t.description}` : ""}`
+                            : (t.description ?? "Despesa")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {isReversal ? "Estorno · " : reversed ? "Estornado · " : ""}
+                        {t.payment_method ? `${t.payment_method} · ` : ""}
+                        {new Date(t.created_at).toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {t.photo_url ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label="Ver comprovante"
+                          onClick={() => void openReceipt(t.photo_url!)}
+                        >
+                          <ImageIcon className="size-4" />
+                        </Button>
+                      ) : null}
+                      <span
+                        className={
+                          t.transaction_type === "income"
+                            ? "text-sm font-semibold text-primary"
+                            : "text-sm font-semibold text-destructive"
+                        }
+                      >
+                        {t.transaction_type === "income" ? "+" : "-"}
+                        {formatBRL(t.amount)}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -549,11 +543,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
             open={withdrawalOpen}
             onOpenChange={setWithdrawalOpen}
             shiftId={openShift.id}
-            unitId={unitId}
-            userId={userId}
             safeBalance={safeBalance}
           />
-
         </>
       ) : null}
     </>

@@ -34,15 +34,32 @@ export function isRoundAmount(value: number): boolean {
   return Number.isFinite(value) && value > 0 && Math.round(value * 100) % 100 === 0;
 }
 
+/**
+ * Aceita "1.234,56", "1234,56", "1234.56" e "1.500".
+ * O ponto só é tratado como separador de milhar quando vem seguido de 3 dígitos.
+ */
 export function parseAmount(raw: string): number {
-  const normalized = raw.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-  const value = Number(normalized);
+  let s = (raw ?? "").replace(/\s|R\$/gi, "");
+  if (!s) return NaN;
+
+  if (s.includes(",")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else {
+    const parts = s.split(".");
+    if (parts.length > 1) {
+      const last = parts[parts.length - 1] ?? "";
+      // "1.500" ou "1.234.567" → milhares; "12.5" / "12.50" → decimal
+      s = last.length === 3 ? parts.join("") : parts.slice(0, -1).join("") + "." + last;
+    }
+  }
+
+  const value = Number(s);
   return Number.isFinite(value) ? Math.round(value * 100) / 100 : NaN;
 }
 
-
 export async function uploadReceipt(file: File, unitId: string, shiftId: string): Promise<string> {
-  const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const ext =
+    (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
   const path = `${unitId}/${shiftId}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from("receipts").upload(path, file, {
     contentType: file.type,
