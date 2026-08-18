@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
-import { computeExpectedClosing, computeRunningCash, isOverLimit } from "@/lib/running-cash";
+import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
 
@@ -124,7 +124,6 @@ export function ShiftPanel({ userId, unitId }: Props) {
       const { error } = await supabase.rpc("open_shift", {
         _unit_id: unitId,
         _quantities: payload.quantities,
-        _total: payload.total,
         ...(payload.notes ? { _notes: payload.notes } : {}),
       });
       if (error) throw error;
@@ -144,22 +143,19 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!openShift) throw new Error("Nenhum caixa aberto.");
 
-      const expectedClosing = computeExpectedClosing(
-        openShift.actual_opening_total,
-        transactions ?? [],
-      );
-
-      const { error } = await supabase.rpc("close_shift", {
+      const { data, error } = await supabase.rpc("close_shift", {
         _shift_id: openShift.id,
         _quantities: payload.quantities,
-        _total: payload.total,
-        _expected_closing: expectedClosing,
         ...(payload.notes ? { _notes: payload.notes } : {}),
       });
       if (error) throw error;
 
-      const diff = Math.round((payload.total - expectedClosing) * 100) / 100;
-      return { total: payload.total, expectedClosing, diff };
+      const result = (data ?? {}) as { total?: number; expected?: number; difference?: number };
+      return {
+        total: Number(result.total ?? payload.total),
+        expectedClosing: Number(result.expected ?? 0),
+        diff: Number(result.difference ?? 0),
+      };
     },
     onSuccess: ({ total, expectedClosing, diff }) => {
       setCalcMode(null);
@@ -189,14 +185,13 @@ export function ShiftPanel({ userId, unitId }: Props) {
       const { data, error } = await supabase.rpc("receive_handover", {
         _pending_shift_id: pendingShift.id,
         _quantities: payload.quantities,
-        _total: payload.total,
         ...(payload.notes ? { _notes: payload.notes } : {}),
       });
       if (error) throw error;
 
-      const result = (data ?? {}) as { matches?: boolean; expected?: number };
+      const result = (data ?? {}) as { matches?: boolean; expected?: number; total?: number };
       return {
-        total: payload.total,
+        total: Number(result.total ?? payload.total),
         matches: Boolean(result.matches),
         expected: Number(result.expected ?? 0),
       };
