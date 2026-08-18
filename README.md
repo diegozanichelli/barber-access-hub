@@ -72,6 +72,14 @@ npm run test
 npm run build
 ```
 
+Com o Supabase CLI e Docker disponíveis, execute também os testes de integração das políticas
+RLS e RPCs:
+
+```sh
+supabase start
+supabase test db
+```
+
 ## Estrutura principal
 
 ```text

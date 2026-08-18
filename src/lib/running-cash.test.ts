@@ -11,6 +11,39 @@ describe("computeRunningCash", () => {
       ]),
     ).toBe(155);
   });
+
+  test("removes both sides of a reversal from the physical drawer", () => {
+    expect(
+      computeRunningCash(100, [
+        {
+          transaction_type: "income",
+          payment_method: "Pix",
+          amount: 200,
+          reversed_at: "2026-08-18T12:00:00Z",
+        },
+        {
+          transaction_type: "expense",
+          payment_method: "Pix",
+          amount: 200,
+          reverses_transaction_id: "original-pix",
+        },
+        {
+          transaction_type: "expense",
+          payment_method: null,
+          category: "Sangria",
+          amount: 80,
+          reversed_at: "2026-08-18T12:01:00Z",
+        },
+        {
+          transaction_type: "income",
+          payment_method: null,
+          category: "Sangria",
+          amount: 80,
+          reverses_transaction_id: "original-safe-drop",
+        },
+      ]),
+    ).toBe(100);
+  });
 });
 
 describe("computeSafeBalance", () => {

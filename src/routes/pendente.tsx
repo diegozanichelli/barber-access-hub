@@ -3,7 +3,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Clock, Loader2, Scissors, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ROLE_LABELS, ROLE_ROUTES, type AppRole } from "@/lib/roles";
+import { resolveAccessState, type AccessState } from "@/lib/access";
+import { ROLE_LABELS } from "@/lib/roles";
 
 export const Route = createFileRoute("/pendente")({
   ssr: false,
@@ -28,41 +29,20 @@ export const Route = createFileRoute("/pendente")({
 
 function PendingPage() {
   const navigate = useNavigate();
-  const [state, setState] = useState<{
-    loading: boolean;
-    status: "pending" | "rejected" | null;
-    requestedRole: AppRole | null;
-  }>({ loading: true, status: null, requestedRole: null });
+  const [state, setState] = useState<AccessState | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
+    void resolveAccessState().then((access) => {
+      if (access.kind === "anonymous") {
         navigate({ to: "/auth", replace: true });
         return;
       }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("status, requested_role")
-        .eq("id", userData.user.id)
-        .maybeSingle();
-
-      if (!profile || profile.status === "approved") {
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", userData.user.id);
-        const role = roles?.[0]?.role as AppRole | undefined;
-        navigate({ to: role ? ROLE_ROUTES[role] : "/atendente", replace: true });
+      if (access.kind === "approved") {
+        navigate({ to: access.route, replace: true });
         return;
       }
-
-      setState({
-        loading: false,
-        status: profile.status as "pending" | "rejected",
-        requestedRole: (profile.requested_role as AppRole | null) ?? null,
-      });
-    })();
+      setState(access);
+    });
   }, [navigate]);
 
   async function signOut() {
@@ -70,7 +50,7 @@ function PendingPage() {
     navigate({ to: "/auth", replace: true });
   }
 
-  if (state.loading) {
+  if (!state) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
@@ -78,7 +58,9 @@ function PendingPage() {
     );
   }
 
-  const rejected = state.status === "rejected";
+  const rejected = state.kind === "rejected";
+  const misconfigured = state.kind === "misconfigured";
+  const requestedRole = "requestedRole" in state ? state.requestedRole : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -88,31 +70,39 @@ function PendingPage() {
           <Scissors className="size-7 text-primary" aria-hidden />
         </div>
         <h1 className="mt-4 text-3xl font-bold tracking-tight">
-          {rejected ? "Cadastro não aprovado" : "Cadastro em análise"}
+          {misconfigured
+            ? "Acesso não configurado"
+            : rejected
+              ? "Cadastro não aprovado"
+              : "Cadastro em análise"}
         </h1>
 
         <div className="surface-panel mt-6 space-y-3 p-5 text-left">
           <div className="flex items-center gap-2">
-            {rejected ? (
+            {rejected || misconfigured ? (
               <XCircle className="size-5 text-destructive" aria-hidden />
             ) : (
               <Clock className="size-5 text-primary" aria-hidden />
             )}
             <p className="font-medium">
-              {rejected ? "Acesso recusado pelo administrador" : "Aguardando aprovação"}
+              {misconfigured
+                ? "Configuração administrativa necessária"
+                : rejected
+                  ? "Acesso recusado pelo administrador"
+                  : "Aguardando aprovação"}
             </p>
           </div>
           <p className="text-sm text-muted-foreground">
-            {rejected
-              ? "Fale com o administrador da rede para revisar seu cadastro."
-              : "Seu cadastro foi enviado e será liberado assim que o administrador aprovar o acesso."}
+            {misconfigured
+              ? state.message
+              : rejected
+                ? "Fale com o administrador da rede para revisar seu cadastro."
+                : "Seu cadastro foi enviado e será liberado assim que o administrador aprovar o acesso."}
           </p>
-          {state.requestedRole ? (
+          {requestedRole ? (
             <p className="text-sm text-muted-foreground">
               Função solicitada:{" "}
-              <span className="font-medium text-foreground">
-                {ROLE_LABELS[state.requestedRole]}
-              </span>
+              <span className="font-medium text-foreground">{ROLE_LABELS[requestedRole]}</span>
             </p>
           ) : null}
         </div>

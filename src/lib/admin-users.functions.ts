@@ -114,7 +114,7 @@ export const approveUser = createServerFn({ method: "POST" })
 
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id,role" });
+      .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id" });
     if (roleError) throw roleError;
 
     const { error: profileError } = await supabaseAdmin
@@ -183,7 +183,7 @@ export const updateManagedUser = createServerFn({ method: "POST" })
 
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id,role" });
+      .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id" });
     if (roleError) throw roleError;
 
     const { error: profileError } = await supabaseAdmin
