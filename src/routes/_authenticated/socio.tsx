@@ -9,8 +9,10 @@ import { useSessionProfile } from "@/hooks/use-session-profile";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
+import { requireDashboardRole } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/socio")({
+  beforeLoad: () => requireDashboardRole("socio"),
   head: () => ({
     meta: [
       { title: "Painel do Sócio | Caixa Grupo Roots" },
