@@ -36,12 +36,21 @@ function Index() {
         navigate({ to: "/auth", replace: true });
         return;
       }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("status")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (profile && profile.status !== "approved") {
+        navigate({ to: "/pendente", replace: true });
+        return;
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", data.user.id);
       const role = roles?.[0]?.role as AppRole | undefined;
-      navigate({ to: role ? ROLE_ROUTES[role] : "/atendente", replace: true });
+      navigate({ to: role ? ROLE_ROUTES[role] : "/pendente", replace: true });
     })();
   }, [navigate]);
 

@@ -9,6 +9,7 @@ export type SessionProfile = {
   role: AppRole | null;
   unitName: string | null;
   unitId: string | null;
+  status: "pending" | "approved" | "rejected";
 };
 
 export function useSessionProfile() {
@@ -23,7 +24,7 @@ export function useSessionProfile() {
       const [{ data: profile }, { data: roles }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("full_name, unit_id, units ( name )")
+          .select("full_name, unit_id, status, units ( name )")
           .eq("id", user.id)
           .maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", user.id),
@@ -38,6 +39,7 @@ export function useSessionProfile() {
         role: (roles?.[0]?.role as AppRole | undefined) ?? null,
         unitName: unit?.name ?? null,
         unitId: profile?.unit_id ?? null,
+        status: (profile?.status as SessionProfile["status"] | undefined) ?? "approved",
       };
     },
   });

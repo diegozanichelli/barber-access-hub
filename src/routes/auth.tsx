@@ -15,7 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ROLE_ROUTES, type AppRole } from "@/lib/roles";
+import { ROLE_LABELS, ROLE_ROUTES, type AppRole } from "@/lib/roles";
+
+const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -42,12 +44,20 @@ export const Route = createFileRoute("/auth")({
 async function routeForCurrentUser(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
   if (!data.user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("status")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  if (profile && profile.status !== "approved") return "/pendente";
+
   const { data: roles } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", data.user.id);
   const role = roles?.[0]?.role as AppRole | undefined;
-  return role ? ROLE_ROUTES[role] : "/atendente";
+  return role ? ROLE_ROUTES[role] : "/pendente";
 }
 
 function AuthPage() {
@@ -58,6 +68,7 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [unitId, setUnitId] = useState<string>("");
+  const [requestedRole, setRequestedRole] = useState<AppRole>("atendente");
 
   const { data: units } = useQuery({
     queryKey: ["units-public"],
@@ -82,7 +93,7 @@ function AuthPage() {
       toast.error("Não foi possível entrar", { description: error.message });
       return;
     }
-    const to = (await routeForCurrentUser()) ?? "/atendente";
+    const to = (await routeForCurrentUser()) ?? "/pendente";
     setLoading(false);
     navigate({ to, replace: true });
   }
@@ -90,12 +101,12 @@ function AuthPage() {
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { full_name: fullName, unit_id: unitId || null },
+        data: { full_name: fullName, unit_id: unitId || null, role: requestedRole },
       },
     });
     setLoading(false);
@@ -103,13 +114,10 @@ function AuthPage() {
       toast.error("Não foi possível criar a conta", { description: error.message });
       return;
     }
-    if (!data.session) {
-      toast.success("Conta criada", {
-        description: "Confirme seu e-mail para acessar o painel.",
-      });
-      return;
-    }
-    navigate({ to: "/atendente", replace: true });
+    toast.success("Cadastro enviado", {
+      description: "Aguarde a aprovação do administrador para acessar o painel.",
+    });
+    navigate({ to: "/pendente", replace: true });
   }
 
   return (
@@ -183,6 +191,24 @@ function AuthPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="signup-role">Função desejada</Label>
+                <Select
+                  value={requestedRole}
+                  onValueChange={(v) => setRequestedRole(v as AppRole)}
+                >
+                  <SelectTrigger id="signup-role">
+                    <SelectValue placeholder="Selecione a função" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SIGNUP_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ROLE_LABELS[r]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="unit">Unidade</Label>
                 <Select value={unitId} onValueChange={setUnitId}>
                   <SelectTrigger id="unit">
@@ -226,8 +252,7 @@ function AuthPage() {
                 Criar conta
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                Novas contas entram como Atendente. O Auditor promove para Supervisor, Sócio ou
-                Auditor.
+                O cadastro fica em análise: o acesso é liberado após a aprovação do administrador.
               </p>
             </form>
           </TabsContent>

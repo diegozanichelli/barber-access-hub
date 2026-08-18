@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as PendenteRouteImport } from './routes/pendente'
 import { Route as AuthenticatedAtendenteRouteImport } from './routes/_authenticated/atendente'
 import { Route as AuthenticatedAuditorRouteImport } from './routes/_authenticated/auditor'
 import { Route as AuthenticatedSocioRouteImport } from './routes/_authenticated/socio'
@@ -29,6 +30,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PendenteRoute = PendenteRouteImport.update({
+  id: '/pendente',
+  path: '/pendente',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAtendenteRoute = AuthenticatedAtendenteRouteImport.update({
@@ -55,6 +61,7 @@ const AuthenticatedSupervisorRoute = AuthenticatedSupervisorRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/pendente': typeof PendenteRoute
   '/atendente': typeof AuthenticatedAtendenteRoute
   '/auditor': typeof AuthenticatedAuditorRoute
   '/socio': typeof AuthenticatedSocioRoute
@@ -63,6 +70,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/pendente': typeof PendenteRoute
   '/atendente': typeof AuthenticatedAtendenteRoute
   '/auditor': typeof AuthenticatedAuditorRoute
   '/socio': typeof AuthenticatedSocioRoute
@@ -73,6 +81,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/pendente': typeof PendenteRoute
   '/_authenticated/atendente': typeof AuthenticatedAtendenteRoute
   '/_authenticated/auditor': typeof AuthenticatedAuditorRoute
   '/_authenticated/socio': typeof AuthenticatedSocioRoute
@@ -81,14 +90,28 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/atendente' | '/auditor' | '/socio' | '/supervisor'
+    | '/'
+    | '/auth'
+    | '/pendente'
+    | '/atendente'
+    | '/auditor'
+    | '/socio'
+    | '/supervisor'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/atendente' | '/auditor' | '/socio' | '/supervisor'
+  to:
+    | '/'
+    | '/auth'
+    | '/pendente'
+    | '/atendente'
+    | '/auditor'
+    | '/socio'
+    | '/supervisor'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/pendente'
     | '/_authenticated/atendente'
     | '/_authenticated/auditor'
     | '/_authenticated/socio'
@@ -99,6 +122,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  PendenteRoute: typeof PendenteRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -122,6 +146,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pendente': {
+      id: '/pendente'
+      path: '/pendente'
+      fullPath: '/pendente'
+      preLoaderRoute: typeof PendenteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/atendente': {
@@ -176,6 +207,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  PendenteRoute: PendenteRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
