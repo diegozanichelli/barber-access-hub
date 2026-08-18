@@ -17,6 +17,13 @@ type Props = {
 export function DashboardShell({ eyebrow, title, subtitle, wide, children }: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: profile } = useSessionProfile();
+
+  useEffect(() => {
+    if (profile && profile.status !== "approved") {
+      navigate({ to: "/pendente", replace: true });
+    }
+  }, [profile, navigate]);
 
   async function handleSignOut() {
     await queryClient.cancelQueries();
