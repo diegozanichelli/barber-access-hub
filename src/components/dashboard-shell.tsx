@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { LogOut, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useSessionProfile } from "@/hooks/use-session-profile";
 
 type Props = {
   eyebrow: string;
