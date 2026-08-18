@@ -9,6 +9,7 @@ export type SessionProfile = {
   role: AppRole | null;
   unitName: string | null;
   unitId: string | null;
+  status: "pending" | "approved" | "rejected";
 };
 
 export function useSessionProfile() {
