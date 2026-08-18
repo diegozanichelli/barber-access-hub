@@ -12,6 +12,25 @@ const APP_ROLES = new Set<AppRole>(["atendente", "supervisor", "socio", "auditor
 
 type AccessProfile = { status: string; requested_role: string | null } | null;
 
+const ACCESS_TIMEOUT_MS = 12_000;
+
+async function withAccessTimeout<T>(operation: PromiseLike<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(operation),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("Tempo esgotado ao verificar seu acesso. Tente novamente.")),
+          ACCESS_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export function classifyAuthenticatedAccess(
   profile: AccessProfile,
   rawRoles: string[],
@@ -49,19 +68,21 @@ export function classifyAuthenticatedAccess(
 
 /** Single source of truth for post-authentication access and routing. */
 export async function resolveAccessState(): Promise<AccessState> {
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const { data: userData, error: userError } = await withAccessTimeout(supabase.auth.getUser());
   if (userError) throw userError;
   if (!userData.user) return { kind: "anonymous" };
 
   const [{ data: profile, error: profileError }, { data: roles, error: rolesError }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("status, requested_role")
-        .eq("id", userData.user.id)
-        .maybeSingle(),
-      supabase.from("user_roles").select("role").eq("user_id", userData.user.id),
-    ]);
+    await withAccessTimeout(
+      Promise.all([
+        supabase
+          .from("profiles")
+          .select("status, requested_role")
+          .eq("id", userData.user.id)
+          .maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", userData.user.id),
+      ]),
+    );
 
   if (profileError) throw profileError;
   if (rolesError) throw rolesError;

@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Clock, Loader2, Scissors, XCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, Clock, Loader2, RefreshCw, Scissors, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { resolveAccessState, type AccessState } from "@/lib/access";
+import { resolveAccessState } from "@/lib/access";
+import { friendlyError } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/roles";
 
 export const Route = createFileRoute("/pendente")({
@@ -29,10 +31,16 @@ export const Route = createFileRoute("/pendente")({
 
 function PendingPage() {
   const navigate = useNavigate();
-  const [state, setState] = useState<AccessState | null>(null);
+  const accessQuery = useQuery({
+    queryKey: ["access-state"],
+    queryFn: resolveAccessState,
+    retry: 1,
+  });
+  const state = accessQuery.data ?? null;
 
   useEffect(() => {
-    void resolveAccessState().then((access) => {
+    if (state) {
+      const access = state;
       if (access.kind === "anonymous") {
         navigate({ to: "/auth", replace: true });
         return;
@@ -41,16 +49,30 @@ function PendingPage() {
         navigate({ to: access.route, replace: true });
         return;
       }
-      setState(access);
-    });
-  }, [navigate]);
+    }
+  }, [state, navigate]);
 
   async function signOut() {
     await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
   }
 
-  if (!state) {
+  if (accessQuery.isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-5">
+        <div className="surface-panel w-full max-w-md p-6 text-center">
+          <AlertTriangle className="mx-auto size-8 text-destructive" aria-hidden />
+          <h1 className="mt-3 text-2xl">Não foi possível verificar seu cadastro</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{friendlyError(accessQuery.error)}</p>
+          <Button className="mt-5" onClick={() => void accessQuery.refetch()}>
+            <RefreshCw className="size-4" /> Tentar novamente
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!state || state.kind === "anonymous" || state.kind === "approved") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />

@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { destinationForAccess, resolveAccessState } from "@/lib/access";
+import { friendlyError } from "@/lib/errors";
 import { ROLE_LABELS, type AppRole } from "@/lib/roles";
 
 const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
@@ -66,9 +67,13 @@ function AuthPage() {
   });
 
   useEffect(() => {
-    routeForCurrentUser().then((to) => {
-      if (to) navigate({ to, replace: true });
-    });
+    void routeForCurrentUser()
+      .then((to) => {
+        if (to) navigate({ to, replace: true });
+      })
+      .catch((error: unknown) => {
+        toast.error("Não foi possível verificar a sessão", { description: friendlyError(error) });
+      });
   }, [navigate]);
 
   async function handleSignIn(e: React.FormEvent) {
@@ -80,9 +85,16 @@ function AuthPage() {
       toast.error("Não foi possível entrar", { description: error.message });
       return;
     }
-    const to = (await routeForCurrentUser()) ?? "/pendente";
-    setLoading(false);
-    navigate({ to, replace: true });
+    try {
+      const to = (await routeForCurrentUser()) ?? "/pendente";
+      navigate({ to, replace: true });
+    } catch (accessError) {
+      toast.error("Não foi possível verificar seu acesso", {
+        description: friendlyError(accessError),
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSignUp(e: React.FormEvent) {
