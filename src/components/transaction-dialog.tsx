@@ -23,6 +23,7 @@ import {
 import { ReceiptUpload } from "@/components/receipt-upload";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
+import { friendlyError } from "@/lib/errors";
 import {
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
@@ -189,7 +190,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
       reset();
       onOpenChange(false);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setError(friendlyError(err)),
   });
 
   const blocked = photoRequired && !file;
