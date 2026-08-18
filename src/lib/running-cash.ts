@@ -9,7 +9,6 @@ export type CashTransaction = {
   reversed_at?: string | null;
 };
 
-
 export type CashWithdrawal = {
   status: string;
   amount: number | string;
@@ -70,7 +69,6 @@ export function computeSafeBalance(
 
   return Math.round(total * 100) / 100;
 }
-
 
 export function isOverLimit(runningCash: number): boolean {
   return runningCash > CASH_LIMIT;

@@ -45,14 +45,13 @@ export function ShiftHistory() {
             <tbody>
               {shifts.map((s) => {
                 const diff =
-                  Math.round((Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100) /
-                  100;
-                const hasClosing =
-                  s.expected_closing_total !== null && s.closing_total !== null;
+                  Math.round(
+                    (Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100,
+                  ) / 100;
+                const hasClosing = s.expected_closing_total !== null && s.closing_total !== null;
                 const shiftDiff = hasClosing
-                  ? Math.round(
-                      (Number(s.closing_total) - Number(s.expected_closing_total)) * 100,
-                    ) / 100
+                  ? Math.round((Number(s.closing_total) - Number(s.expected_closing_total)) * 100) /
+                    100
                   : null;
                 const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
                 const openingBad = Math.abs(diff) >= 0.01;
@@ -72,9 +71,7 @@ export function ShiftHistory() {
                     </td>
                     <td className="py-3 pr-3 text-muted-foreground">
                       {new Date(s.opened_at).toLocaleString("pt-BR")}
-                      <span className="block text-xs">
-                        {data.names[s.opened_by] ?? "Usuário"}
-                      </span>
+                      <span className="block text-xs">{data.names[s.opened_by] ?? "Usuário"}</span>
                     </td>
                     <td className="py-3 pr-3">{formatBRL(s.expected_opening_total)}</td>
                     <td className="py-3 pr-3">{formatBRL(s.actual_opening_total)}</td>
@@ -122,7 +119,6 @@ export function ShiftHistory() {
                   </tr>
                 );
               })}
-
             </tbody>
           </table>
         </div>

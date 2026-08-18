@@ -46,8 +46,6 @@ export function AuditorOverview() {
       data.withdrawals.filter((w) => w.unit_id === unit.id),
     );
 
-
-
     return {
       unit,
       active,
@@ -57,7 +55,6 @@ export function AuditorOverview() {
       over: Boolean(active) && isOverLimit(running),
       openedBy: active ? (data.names[active.opened_by] ?? "Usuário") : null,
     };
-
   });
 
   const overLimit = cards.filter((c) => c.over);
@@ -168,7 +165,6 @@ export function AuditorOverview() {
                     {formatBRL(c.safe)}
                   </p>
                 </div>
-
               </div>
               {c.over ? (
                 <p className="mt-1 text-xs font-semibold text-destructive">
@@ -176,7 +172,6 @@ export function AuditorOverview() {
                 </p>
               ) : null}
             </article>
-
           ))}
         </div>
       </section>

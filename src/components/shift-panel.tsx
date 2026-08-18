@@ -205,7 +205,9 @@ export function ShiftPanel({ userId, unitId }: Props) {
       setCalcMode(null);
       setLastResult({ label: "Turno recebido com", total });
       if (matches) {
-        toast.success("Repasse confirmado", { description: `Total conferido: ${formatBRL(total)}` });
+        toast.success("Repasse confirmado", {
+          description: `Total conferido: ${formatBRL(total)}`,
+        });
       } else {
         toast.error("Divergência detectada! A Auditoria foi notificada.", {
           description: `Repassado: ${formatBRL(expected)} · Contado: ${formatBRL(total)}`,
@@ -267,9 +269,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
 
   return (
     <>
-      {openShift && isOverLimit(runningCash) ? (
-        <CashLimitBanner runningCash={runningCash} />
-      ) : null}
+      {openShift && isOverLimit(runningCash) ? <CashLimitBanner runningCash={runningCash} /> : null}
 
       {lastResult ? (
         <section className="surface-panel p-5">

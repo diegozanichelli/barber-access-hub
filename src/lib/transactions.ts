@@ -57,10 +57,9 @@ export function parseAmount(raw: string): number {
   return Number.isFinite(value) ? Math.round(value * 100) / 100 : NaN;
 }
 
-
-
 export async function uploadReceipt(file: File, unitId: string, shiftId: string): Promise<string> {
-  const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const ext =
+    (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
   const path = `${unitId}/${shiftId}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from("receipts").upload(path, file, {
     contentType: file.type,

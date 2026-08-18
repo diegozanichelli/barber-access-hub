@@ -103,8 +103,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           );
         }
 
-
-
         const parsedRows = rows.map((p) => {
           const parsed = incomeSchema.safeParse({
             category,
@@ -112,7 +110,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
             amount: p.value,
             paymentMethod: p.method,
           });
-          if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
+          if (!parsed.success)
+            throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
           return parsed.data;
         });
 
@@ -273,9 +272,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                           size="icon"
                           variant="ghost"
                           aria-label={`Remover pagamento ${index + 1}`}
-                          onClick={() =>
-                            setPayments((prev) => prev.filter((p) => p.id !== row.id))
-                          }
+                          onClick={() => setPayments((prev) => prev.filter((p) => p.id !== row.id))}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -292,7 +289,10 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                           )
                         }
                       >
-                        <SelectTrigger className="h-12" aria-label={`Forma de pagamento ${index + 1}`}>
+                        <SelectTrigger
+                          className="h-12"
+                          aria-label={`Forma de pagamento ${index + 1}`}
+                        >
                           <SelectValue placeholder="Forma de pagamento" />
                         </SelectTrigger>
                         <SelectContent>

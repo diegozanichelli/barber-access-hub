@@ -89,7 +89,6 @@ function AuditorDashboard() {
           <UnitManager />
         </TabsContent>
 
-
         <TabsContent value="overview" className="space-y-4">
           <AuditorOverview />
         </TabsContent>
@@ -103,105 +102,105 @@ function AuditorDashboard() {
         </TabsContent>
 
         <TabsContent value="users">
-      <section className="surface-panel p-5">
-        <div className="flex items-center gap-2">
-          <Users className="size-5 text-primary" aria-hidden />
-          <h2 className="text-lg">Gerenciar usuários</h2>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Defina o papel e a unidade de cada usuário da rede.
-        </p>
+          <section className="surface-panel p-5">
+            <div className="flex items-center gap-2">
+              <Users className="size-5 text-primary" aria-hidden />
+              <h2 className="text-lg">Gerenciar usuários</h2>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Defina o papel e a unidade de cada usuário da rede.
+            </p>
 
-        {isLoading ? (
-          <div className="mt-6 flex justify-center">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <ul className="mt-4 space-y-4">
-            {(users ?? []).map((user) => {
-              const draft = drafts[user.id] ?? {
-                role: (user.role as AppRole | null) ?? "atendente",
-                unitId: user.unitId ?? NO_UNIT,
-              };
-              const dirty =
-                draft.role !== ((user.role as AppRole | null) ?? "atendente") ||
-                draft.unitId !== (user.unitId ?? NO_UNIT);
+            {isLoading ? (
+              <div className="mt-6 flex justify-center">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ul className="mt-4 space-y-4">
+                {(users ?? []).map((user) => {
+                  const draft = drafts[user.id] ?? {
+                    role: (user.role as AppRole | null) ?? "atendente",
+                    unitId: user.unitId ?? NO_UNIT,
+                  };
+                  const dirty =
+                    draft.role !== ((user.role as AppRole | null) ?? "atendente") ||
+                    draft.unitId !== (user.unitId ?? NO_UNIT);
 
-              return (
-                <li key={user.id} className="rounded-lg border border-border/60 p-4">
-                  <p className="font-medium">{user.fullName}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                  return (
+                    <li key={user.id} className="rounded-lg border border-border/60 p-4">
+                      <p className="font-medium">{user.fullName}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
 
-                  <div className="mt-3 grid gap-3">
-                    <Select
-                      value={draft.role}
-                      onValueChange={(role) =>
-                        setDrafts((p) => ({
-                          ...p,
-                          [user.id]: {
-                            role: role as AppRole,
-                            unitId: role === "auditor" ? NO_UNIT : draft.unitId,
-                          },
-                        }))
-                      }
-                    >
-                      <SelectTrigger aria-label={`Papel de ${user.fullName}`}>
-                        <SelectValue placeholder="Papel" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ROLE_ORDER.map((r) => (
-                          <SelectItem key={r} value={r}>
-                            {ROLE_LABELS[r]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <div className="mt-3 grid gap-3">
+                        <Select
+                          value={draft.role}
+                          onValueChange={(role) =>
+                            setDrafts((p) => ({
+                              ...p,
+                              [user.id]: {
+                                role: role as AppRole,
+                                unitId: role === "auditor" ? NO_UNIT : draft.unitId,
+                              },
+                            }))
+                          }
+                        >
+                          <SelectTrigger aria-label={`Papel de ${user.fullName}`}>
+                            <SelectValue placeholder="Papel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ROLE_ORDER.map((r) => (
+                              <SelectItem key={r} value={r}>
+                                {ROLE_LABELS[r]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
 
-                    {draft.role === "auditor" ? (
-                      <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                        Acesso a todas as unidades
+                        {draft.role === "auditor" ? (
+                          <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                            Acesso a todas as unidades
+                          </div>
+                        ) : (
+                          <Select
+                            value={draft.unitId}
+                            onValueChange={(unitId) =>
+                              setDrafts((p) => ({ ...p, [user.id]: { ...draft, unitId } }))
+                            }
+                          >
+                            <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
+                              <SelectValue placeholder="Unidade" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NO_UNIT}>Sem unidade</SelectItem>
+                              {(units ?? []).map((u) => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  {u.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+
+                        <Button
+                          size="sm"
+                          disabled={!dirty || mutation.isPending}
+                          onClick={() =>
+                            mutation.mutate({
+                              userId: user.id,
+                              role: draft.role,
+                              unitId: draft.unitId === NO_UNIT ? null : draft.unitId,
+                            })
+                          }
+                        >
+                          Salvar alterações
+                        </Button>
                       </div>
-                    ) : (
-                      <Select
-                        value={draft.unitId}
-                        onValueChange={(unitId) =>
-                          setDrafts((p) => ({ ...p, [user.id]: { ...draft, unitId } }))
-                        }
-                      >
-                        <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
-                          <SelectValue placeholder="Unidade" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NO_UNIT}>Sem unidade</SelectItem>
-                          {(units ?? []).map((u) => (
-                            <SelectItem key={u.id} value={u.id}>
-                              {u.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-
-                    <Button
-                      size="sm"
-                      disabled={!dirty || mutation.isPending}
-                      onClick={() =>
-                        mutation.mutate({
-                          userId: user.id,
-                          role: draft.role,
-                          unitId: draft.unitId === NO_UNIT ? null : draft.unitId,
-                        })
-                      }
-                    >
-                      Salvar alterações
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
         </TabsContent>
       </Tabs>
     </DashboardShell>

@@ -45,8 +45,6 @@ function PartnerDashboard() {
     },
   });
 
-
-
   const { data: withdrawals, isLoading: loadingWithdrawals } = useQuery({
     queryKey: ["partner-withdrawals", profile?.userId],
     enabled: !!profile?.userId,
@@ -101,7 +99,6 @@ function PartnerDashboard() {
     },
     onError: (error: Error) =>
       toast.error("Erro ao atualizar", { description: friendlyError(error) }),
-
   });
 
   return (
@@ -164,13 +161,16 @@ function PartnerDashboard() {
                   {disputeId === w.id ? (
                     <p className="mt-2 text-xs text-muted-foreground">
                       Contestar aciona a Auditoria. Toque de novo para confirmar ou{" "}
-                      <button type="button" className="underline" onClick={() => setDisputeId(null)}>
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => setDisputeId(null)}
+                      >
                         cancelar
                       </button>
                       .
                     </p>
                   ) : null}
-
                 </li>
               );
             })}
@@ -214,7 +214,6 @@ function PartnerDashboard() {
           </ul>
         )}
       </section>
-
     </DashboardShell>
   );
 }

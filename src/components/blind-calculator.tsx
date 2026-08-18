@@ -12,12 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DENOMINATIONS,
-  EMPTY_QUANTITIES,
-  calculateTotal,
-  type CashQuantities,
-} from "@/lib/cash";
+import { DENOMINATIONS, EMPTY_QUANTITIES, calculateTotal, type CashQuantities } from "@/lib/cash";
 
 type Props = {
   open: boolean;

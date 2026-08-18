@@ -33,7 +33,6 @@ type Props = {
 };
 
 export function WithdrawalDialog({ open, onOpenChange, shiftId, safeBalance }: Props) {
-
   const queryClient = useQueryClient();
   const [partnerId, setPartnerId] = useState("");
   const [amount, setAmount] = useState("");
@@ -70,7 +69,6 @@ export function WithdrawalDialog({ open, onOpenChange, shiftId, safeBalance }: P
     onError: (error: Error) =>
       toast.error("Erro ao registrar retirada", { description: friendlyError(error) }),
   });
-
 
   const exceedsSafe = Number.isFinite(value) && value > safeBalance;
   const valid = partnerId !== "" && Number.isFinite(value) && value > 0 && !exceedsSafe;
