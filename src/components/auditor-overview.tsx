@@ -1,6 +1,6 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { formatBRL } from "@/lib/cash";
-import { computeRunningCash, computeSafeBalance, isOverLimit } from "@/lib/running-cash";
+import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -40,11 +40,7 @@ export function AuditorOverview() {
         )
       : 0;
 
-    // O cofre é acumulado por unidade: soma todas as sangrias e retiradas da unidade.
-    const safe = computeSafeBalance(
-      data.transactions.filter((t) => t.unit_id === unit.id),
-      data.withdrawals.filter((w) => w.unit_id === unit.id),
-    );
+    const safe = data.safeBalances[unit.id] ?? 0;
 
     return {
       unit,
