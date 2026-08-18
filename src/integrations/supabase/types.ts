@@ -438,6 +438,13 @@ export type Database = {
         Args: { _note: string; _shift_id: string }
         Returns: undefined
       }
+      respond_partner_withdrawal: {
+        Args: {
+          _decision: Database["public"]["Enums"]["withdrawal_status"]
+          _withdrawal_id: string
+        }
+        Returns: Database["public"]["Enums"]["withdrawal_status"]
+      }
       resolve_withdrawal_dispute: {
         Args: { _note: string; _withdrawal_id: string }
         Returns: undefined
