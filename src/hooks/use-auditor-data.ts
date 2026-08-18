@@ -28,6 +28,8 @@ export type TransactionRow = {
   description: string | null;
   photo_url: string | null;
   created_at: string;
+  reversed_at: string | null;
+  reverses_transaction_id: string | null;
 };
 export type WithdrawalRow = {
   id: string;
@@ -38,6 +40,7 @@ export type WithdrawalRow = {
   status: string;
   created_at: string;
 };
+
 export type CashCountRow = {
   id: string;
   shift_id: string;

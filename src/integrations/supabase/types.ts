@@ -94,7 +94,11 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          note: string | null
           partner_id: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
           shift_id: string
           status: Database["public"]["Enums"]["withdrawal_status"]
           unit_id: string
@@ -105,7 +109,11 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          note?: string | null
           partner_id: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
           shift_id: string
           status?: Database["public"]["Enums"]["withdrawal_status"]
           unit_id: string
@@ -116,7 +124,11 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          note?: string | null
           partner_id?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
           shift_id?: string
           status?: Database["public"]["Enums"]["withdrawal_status"]
           unit_id?: string
@@ -183,6 +195,9 @@ export type Database = {
           id: string
           opened_at: string
           opened_by: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
           status: string
           unit_id: string
           updated_at: string
@@ -198,6 +213,9 @@ export type Database = {
           id?: string
           opened_at?: string
           opened_by: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
           status?: string
           unit_id: string
           updated_at?: string
@@ -213,6 +231,9 @@ export type Database = {
           id?: string
           opened_at?: string
           opened_by?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
           status?: string
           unit_id?: string
           updated_at?: string
@@ -237,6 +258,9 @@ export type Database = {
           id: string
           payment_method: Database["public"]["Enums"]["payment_method"] | null
           photo_url: string | null
+          reversed_at: string | null
+          reversed_by: string | null
+          reverses_transaction_id: string | null
           shift_id: string
           transaction_type: string
           unit_id: string
@@ -251,6 +275,9 @@ export type Database = {
           id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           photo_url?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          reverses_transaction_id?: string | null
           shift_id: string
           transaction_type: string
           unit_id: string
@@ -265,12 +292,22 @@ export type Database = {
           id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           photo_url?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          reverses_transaction_id?: string | null
           shift_id?: string
           transaction_type?: string
           unit_id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_reverses_transaction_id_fkey"
+            columns: ["reverses_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_shift_id_fkey"
             columns: ["shift_id"]
@@ -331,6 +368,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      close_shift: {
+        Args: {
+          _expected_closing: number
+          _notes?: string
+          _quantities: Json
+          _shift_id: string
+          _total: number
+        }
+        Returns: undefined
+      }
+      create_partner_withdrawal: {
+        Args: {
+          _amount: number
+          _note?: string
+          _partner_id: string
+          _shift_id: string
+        }
+        Returns: string
+      }
       current_unit_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -347,6 +403,37 @@ export type Database = {
           unit_id: string
         }[]
       }
+      open_shift: {
+        Args: {
+          _notes?: string
+          _quantities: Json
+          _total: number
+          _unit_id: string
+        }
+        Returns: string
+      }
+      receive_handover: {
+        Args: {
+          _notes?: string
+          _pending_shift_id: string
+          _quantities: Json
+          _total: number
+        }
+        Returns: Json
+      }
+      resolve_shift_dispute: {
+        Args: { _note: string; _shift_id: string }
+        Returns: undefined
+      }
+      resolve_withdrawal_dispute: {
+        Args: { _note: string; _withdrawal_id: string }
+        Returns: undefined
+      }
+      reverse_transaction: {
+        Args: { _reason: string; _transaction_id: string }
+        Returns: string
+      }
+      unit_safe_balance: { Args: { _unit_id: string }; Returns: number }
     }
     Enums: {
       app_role: "atendente" | "supervisor" | "socio" | "auditor"

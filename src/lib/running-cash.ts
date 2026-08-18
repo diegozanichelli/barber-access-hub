@@ -5,7 +5,10 @@ export type CashTransaction = {
   payment_method: string | null;
   amount: number | string;
   category?: string | null;
+  reverses_transaction_id?: string | null;
+  reversed_at?: string | null;
 };
+
 
 export type CashWithdrawal = {
   status: string;
@@ -41,9 +44,12 @@ export function computeRunningCash(
 export const computeExpectedClosing = computeRunningCash;
 
 /**
- * Money held in the safe for this shift: safe drops (sangrias) minus partner
- * withdrawals in every status (pending, approved and disputed) — the money
- * physically left the safe; "disputed" is an auditor alert, not a refund.
+ * Saldo do cofre: sangrias menos retiradas de sócio em qualquer status
+ * (pendente, confirmada e contestada) — o dinheiro saiu fisicamente do cofre;
+ * "contestada" é um alerta para a auditoria, não um estorno.
+ *
+ * O cofre é acumulado por UNIDADE (não zera a cada turno): passe todos os
+ * lançamentos e retiradas da unidade, não apenas os do turno aberto.
  */
 export function computeSafeBalance(
   transactions: CashTransaction[] = [],
@@ -52,6 +58,7 @@ export function computeSafeBalance(
   let total = 0;
 
   for (const t of transactions) {
+    if (t.reverses_transaction_id || t.reversed_at) continue;
     if (t.transaction_type !== "income" && t.category === "Sangria") {
       total += Number(t.amount ?? 0);
     }
@@ -63,6 +70,7 @@ export function computeSafeBalance(
 
   return Math.round(total * 100) / 100;
 }
+
 
 export function isOverLimit(runningCash: number): boolean {
   return runningCash > CASH_LIMIT;

@@ -40,22 +40,28 @@ export function BlindCalculator({
 }: Props) {
   const [quantities, setQuantities] = useState<CashQuantities>({ ...EMPTY_QUANTITIES });
   const [notes, setNotes] = useState("");
+  const [confirmZero, setConfirmZero] = useState(false);
 
   const total = useMemo(() => calculateTotal(quantities), [quantities]);
+  const isZero = total === 0;
 
   function setField(field: keyof CashQuantities, raw: string) {
     const parsed = Math.max(0, Math.floor(Number(raw.replace(/\D/g, "")) || 0));
+    setConfirmZero(false);
     setQuantities((prev) => ({ ...prev, [field]: parsed }));
+  }
+
+  function reset() {
+    setQuantities({ ...EMPTY_QUANTITIES });
+    setNotes("");
+    setConfirmZero(false);
   }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) {
-          setQuantities({ ...EMPTY_QUANTITIES });
-          setNotes("");
-        }
+        if (!next) reset();
         onOpenChange(next);
       }}
     >
@@ -93,16 +99,29 @@ export function BlindCalculator({
               rows={2}
             />
           </div>
+
+          {isZero && confirmZero ? (
+            <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
+              Você não preencheu nenhuma quantidade. Isso registra a contagem como R$ 0,00. Toque
+              novamente para confirmar que a gaveta está realmente vazia.
+            </p>
+          ) : null}
         </div>
 
         <DialogFooter>
           <Button
             className="w-full"
             disabled={submitting}
-            onClick={() => onSubmit({ quantities, total, notes })}
+            onClick={() => {
+              if (isZero && !confirmZero) {
+                setConfirmZero(true);
+                return;
+              }
+              onSubmit({ quantities, total, notes });
+            }}
           >
             {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
-            {submitLabel}
+            {isZero && confirmZero ? "Confirmar caixa vazio (R$ 0,00)" : submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
