@@ -24,7 +24,7 @@ export function useSessionProfile() {
       const [{ data: profile }, { data: roles }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("full_name, unit_id, units ( name )")
+          .select("full_name, unit_id, status, units ( name )")
           .eq("id", user.id)
           .maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", user.id),
