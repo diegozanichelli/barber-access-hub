@@ -95,6 +95,15 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         const rows = parsedPayments.filter((p) => p.method !== "" || p.amount.trim() !== "");
         if (rows.length === 0) throw new Error("Informe ao menos uma forma de pagamento.");
 
+        const methods = rows.map((p) => p.method);
+        if (new Set(methods).size !== methods.length) {
+          throw new Error(
+            "Você repetiu a mesma forma de pagamento. Some os valores em uma única linha.",
+          );
+        }
+
+
+
         const parsedRows = rows.map((p) => {
           const parsed = incomeSchema.safeParse({
             category,
