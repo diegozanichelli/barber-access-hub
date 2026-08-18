@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Download, Loader2, Undo2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -10,8 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipt-thumb";
+import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
+import { friendlyError } from "@/lib/errors";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 
@@ -19,15 +30,46 @@ const ALL = "__all__";
 const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"];
 const PAGE_SIZE = 25;
 
-export function AuditFeed() {
+export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
+  const queryClient = useQueryClient();
   const { data: references } = useAuditorReferences();
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
   const [category, setCategory] = useState(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(0);
+  const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
 
   useEffect(() => setPage(0), [unitId, type, category, order]);
+  useEffect(() => {
+    if (selectedUnitId) setUnitId(selectedUnitId);
+  }, [selectedUnitId]);
+
+  const reverseMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await supabase.rpc("reverse_transaction", {
+        _transaction_id: id,
+        _reason: reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+        queryClient.invalidateQueries({ queryKey: ["shift-transactions"] }),
+      ]);
+      toast.success("Lançamento estornado", {
+        description:
+          "O valor incorreto foi neutralizado e o histórico de auditoria foi preservado.",
+      });
+      setPendingReversal(null);
+      setReversalReason("");
+    },
+    onError: (error) =>
+      toast.error("Erro ao estornar lançamento", { description: friendlyError(error) }),
+  });
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ["audit-transactions", page, unitId, type, category, order],
@@ -159,6 +201,8 @@ export function AuditFeed() {
           {rows.map((t) => {
             const income = t.transaction_type === "income";
             const safeDrop = t.category === "Sangria";
+            const isReversal = Boolean(t.reverses_transaction_id);
+            const wasReversed = Boolean(t.reversed_at);
             return (
               <li key={t.id} className="flex items-start gap-3 py-4">
                 <ReceiptThumb
@@ -171,6 +215,11 @@ export function AuditFeed() {
                       {safeDrop ? (
                         <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
                           Sangria · Cofre
+                        </span>
+                      ) : null}
+                      {isReversal || wasReversed ? (
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {isReversal ? "Estorno" : "Estornado"}
                         </span>
                       ) : null}
                       <span className="truncate">
@@ -196,6 +245,16 @@ export function AuditFeed() {
                   ) : null}
                   {!t.photo_url && !safeDrop ? (
                     <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
+                  ) : null}
+                  {!isReversal && !wasReversed ? (
+                    <Button
+                      className="mt-2"
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setPendingReversal(t)}
+                    >
+                      <Undo2 className="size-4" /> Estornar erro
+                    </Button>
                   ) : null}
                 </div>
               </li>
@@ -228,6 +287,64 @@ export function AuditFeed() {
           </Button>
         </div>
       </div>
+
+      <Dialog
+        open={Boolean(pendingReversal)}
+        onOpenChange={(open) => {
+          if (!open && !reverseMutation.isPending) {
+            setPendingReversal(null);
+            setReversalReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Estornar lançamento incorreto?</DialogTitle>
+            <DialogDescription>
+              O registro não será apagado: um estorno compensatório será criado para corrigir o
+              caixa sem perder o histórico da auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingReversal ? (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
+              <p className="font-medium">
+                {pendingReversal.category} · {formatBRL(pendingReversal.amount)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {references.unitNames[pendingReversal.unit_id] ?? "Unidade"} ·{" "}
+                {new Date(pendingReversal.created_at).toLocaleString("pt-BR")}
+              </p>
+            </div>
+          ) : null}
+          <Textarea
+            value={reversalReason}
+            onChange={(event) => setReversalReason(event.target.value)}
+            placeholder="Informe o motivo da correção"
+            aria-label="Motivo do estorno"
+            disabled={reverseMutation.isPending}
+          />
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setPendingReversal(null)}
+              disabled={reverseMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={reversalReason.trim().length < 5 || reverseMutation.isPending}
+              onClick={() => {
+                if (!pendingReversal) return;
+                reverseMutation.mutate({ id: pendingReversal.id, reason: reversalReason.trim() });
+              }}
+            >
+              {reverseMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Confirmar estorno
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

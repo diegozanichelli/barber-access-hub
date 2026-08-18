@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { AuditFeed } from "@/components/audit-feed";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { ShiftHistory } from "@/components/shift-history";
@@ -27,6 +28,13 @@ export const Route = createFileRoute("/_authenticated/auditor")({
 
 function AuditorDashboard() {
   const { data: profile } = useSessionProfile();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedUnitId, setSelectedUnitId] = useState<string>();
+
+  function viewUnitTransactions(unitId: string) {
+    setSelectedUnitId(unitId);
+    setActiveTab("feed");
+  }
 
   return (
     <DashboardShell
@@ -35,7 +43,7 @@ function AuditorDashboard() {
       subtitle={`${profile?.fullName ?? ""} · Acesso a todas as unidades`.trim()}
       wide
     >
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="feed">Lançamentos</TabsTrigger>
@@ -49,11 +57,11 @@ function AuditorDashboard() {
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-4">
-          <AuditorOverview />
+          <AuditorOverview onViewTransactions={viewUnitTransactions} />
         </TabsContent>
 
         <TabsContent value="feed">
-          <AuditFeed />
+          <AuditFeed selectedUnitId={selectedUnitId} />
         </TabsContent>
 
         <TabsContent value="history">
