@@ -5,6 +5,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
 
 const roleSchema = z.enum(["atendente", "supervisor", "socio", "auditor"]);
+const approvableRoleSchema = z.enum(["atendente", "supervisor", "socio"]);
 
 export type ManagedUser = {
   id: string;
@@ -96,8 +97,8 @@ export const approveUser = createServerFn({ method: "POST" })
     z
       .object({
         userId: z.string().uuid(),
-        role: roleSchema,
-        unitId: z.string().uuid().nullable(),
+        role: approvableRoleSchema,
+        unitId: z.string().uuid(),
       })
       .parse(data),
   )
@@ -121,7 +122,7 @@ export const approveUser = createServerFn({ method: "POST" })
       .from("profiles")
       .update({
         status: "approved",
-        unit_id: data.role === "auditor" ? null : data.unitId,
+        unit_id: data.unitId,
         approved_by: context.userId,
         approved_at: new Date().toISOString(),
       })
