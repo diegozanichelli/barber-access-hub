@@ -252,8 +252,7 @@ function AuthPage() {
                 Criar conta
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                Novas contas entram como Atendente. O Auditor promove para Supervisor, Sócio ou
-                Auditor.
+                O cadastro fica em análise: o acesso é liberado após a aprovação do administrador.
               </p>
             </form>
           </TabsContent>
