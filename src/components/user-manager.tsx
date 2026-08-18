@@ -202,16 +202,15 @@ export function UserManager() {
                       placeholder="Nova senha (mín. 6 caracteres)"
                       aria-label={`Nova senha de ${user.fullName}`}
                       value={password}
-                      onChange={(e) =>
-                        setPasswords((p) => ({ ...p, [user.id]: e.target.value }))
-                      }
+                      onChange={(e) => setPasswords((p) => ({ ...p, [user.id]: e.target.value }))}
                     />
                     <Button
                       size="sm"
                       variant="secondary"
                       disabled={password.length < 6 || passwordMutation.isPending}
                       onClick={() => {
-                        if (!window.confirm(`Definir uma nova senha para ${user.fullName}?`)) return;
+                        if (!window.confirm(`Definir uma nova senha para ${user.fullName}?`))
+                          return;
                         passwordMutation.mutate({ userId: user.id, password });
                       }}
                     >
