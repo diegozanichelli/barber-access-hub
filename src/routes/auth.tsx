@@ -68,6 +68,7 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [unitId, setUnitId] = useState<string>("");
+  const [requestedRole, setRequestedRole] = useState<AppRole>("atendente");
 
   const { data: units } = useQuery({
     queryKey: ["units-public"],
