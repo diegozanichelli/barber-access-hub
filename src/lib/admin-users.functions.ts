@@ -109,13 +109,12 @@ export const approveUser = createServerFn({ method: "POST" })
     const { error: delError } = await supabaseAdmin
       .from("user_roles")
       .delete()
-      .eq("user_id", data.userId)
-      .neq("role", data.role);
+      .eq("user_id", data.userId);
     if (delError) throw delError;
 
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id" });
+      .insert({ user_id: data.userId, role: data.role });
     if (roleError) throw roleError;
 
     const { error: profileError } = await supabaseAdmin
@@ -178,13 +177,12 @@ export const updateManagedUser = createServerFn({ method: "POST" })
     const { error: delError } = await supabaseAdmin
       .from("user_roles")
       .delete()
-      .eq("user_id", data.userId)
-      .neq("role", data.role);
+      .eq("user_id", data.userId);
     if (delError) throw delError;
 
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id" });
+      .insert({ user_id: data.userId, role: data.role });
     if (roleError) throw roleError;
 
     const { error: profileError } = await supabaseAdmin
