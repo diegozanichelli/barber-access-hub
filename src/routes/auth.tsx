@@ -192,10 +192,7 @@ function AuthPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="signup-role">Função desejada</Label>
-                <Select
-                  value={requestedRole}
-                  onValueChange={(v) => setRequestedRole(v as AppRole)}
-                >
+                <Select value={requestedRole} onValueChange={(v) => setRequestedRole(v as AppRole)}>
                   <SelectTrigger id="signup-role">
                     <SelectValue placeholder="Selecione a função" />
                   </SelectTrigger>

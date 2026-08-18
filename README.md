@@ -1,58 +1,95 @@
-# Caixa Roots Tree
+# Caixa Grupo Roots
 
-I want to build a SaaS for Cash Register Auditing for a Barbershop chain. We will build this in stages to ensure high quality. This is STAGE 1: Authentication, Roles, and Routing.
+Sistema web de operação e auditoria de caixa para redes de barbearias. O projeto é conectado ao [Lovable](https://lovable.dev/projects/d6f9a349-2b1d-4b19-8905-272d787e72b9) e usa Supabase para autenticação, PostgreSQL e armazenamento privado de comprovantes.
 
-Please set up a Supabase project with Authentication and a PostgreSQL database.
+## Funcionalidades
 
-1. Database Setup:
+- Cadastro com aprovação administrativa e acesso por papel.
+- Painéis para **Atendente**, **Supervisor**, **Sócio** e **Auditor**.
+- Gestão de unidades, usuários, papéis e vínculos com unidades.
+- Abertura, fechamento e repasse de turnos com contagem cega por denominação.
+- Entradas, despesas e sangrias, incluindo comprovantes privados quando exigidos.
+- Saldo físico da gaveta, saldo acumulado do cofre e alerta de limite de caixa.
+- Retiradas de sócios com confirmação ou contestação.
+- Visão consolidada, divergências, histórico, feed de auditoria e exportação CSV.
 
-Create a units table (id, name - e.g., Parque10, Ponta Negra).
+## Papéis e rotas
 
-Create a profiles table linked to Supabase Auth users. It needs: id, full_name, role, and unit_id (foreign key to units, except for Admins).
+| Papel           | Rota          | Acesso principal                                  |
+| --------------- | ------------- | ------------------------------------------------- |
+| Atendente       | `/atendente`  | Operação do caixa da unidade atribuída            |
+| Supervisor      | `/supervisor` | Operação e acompanhamento do caixa da unidade     |
+| Sócio           | `/socio`      | Confirmação e contestação das próprias retiradas  |
+| Auditor / Admin | `/auditor`    | Auditoria da rede e gestão de usuários e unidades |
 
-2. User Roles: We have 4 strictly defined roles:
+Novas contas de atendente, supervisor ou sócio ficam pendentes até a aprovação de um auditor. O papel de auditor não pode ser solicitado no cadastro público.
 
-Attendant (Atendente)
+## Stack
 
-Supervisor
+- React 19, TypeScript e Vite
+- TanStack Start, Router e Query
+- Tailwind CSS e Radix UI
+- Supabase Auth, PostgreSQL, Row Level Security e Storage
+- Zod para validação
 
-Partner (Sócio - Very explicit login needed for this role)
+## Desenvolvimento local
 
-Auditor/Admin (Auditor)
+### Pré-requisitos
 
-3. UI & Routing (Mobile-first design):
+- Node.js compatível com as dependências do projeto
+- npm ou Bun
+- Projeto Supabase com as migrations de `supabase/migrations` aplicadas
 
-Build a clean Login Screen.
+### Variáveis de ambiente
 
-After login, route the user to their specific dashboard based on their role:
-
-Attendant Dashboard: Show "Welcome [Name] - Unit [Unit Name]". Leave space for future shift buttons.
-
-Supervisor Dashboard: Show "Welcome Supervisor [Name]".
-
-Partner Dashboard (Sócio): Show "Welcome Partner [Name]". Leave space for future "Pending Approvals".
-
-Auditor Dashboard: Show "Welcome Admin".
-
-Do not build the cash register features yet. Focus ONLY on a robust authentication system, assigning roles correctly in Supabase, and routing users to the correct blank dashboards.
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/d6f9a349-2b1d-4b19-8905-272d787e72b9).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Crie um arquivo `.env` sem versionar segredos:
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+# Disponíveis no bundle do navegador
+VITE_SUPABASE_URL=https://seu-projeto.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sua-chave-publicavel
+
+# Usadas pelo servidor TanStack Start
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sua-chave-publicavel
+SUPABASE_SERVICE_ROLE_KEY=sua-chave-service-role
+```
+
+A `SUPABASE_SERVICE_ROLE_KEY` é exclusiva do servidor e nunca deve receber o prefixo `VITE_`.
+
+### Instalação e execução
+
+```sh
+npm install
 npm run dev
 ```
+
+A aplicação utiliza as seguintes verificações:
+
+```sh
+npm run lint
+npm run test
+npm run build
+```
+
+## Estrutura principal
+
+```text
+src/routes/                    Rotas e painéis por papel
+src/components/                Fluxos de caixa, auditoria e componentes visuais
+src/hooks/                     Consultas compartilhadas da sessão e auditoria
+src/lib/                       Regras de negócio, validação e server functions
+src/integrations/supabase/     Clientes, middleware e tipos do Supabase
+supabase/migrations/           Esquema, RPCs, triggers e políticas RLS
+```
+
+## Segurança
+
+- As rotas privadas exigem uma sessão válida e cada painel valida o papel aprovado do usuário.
+- As políticas de Row Level Security do Supabase são a barreira principal de acesso aos dados.
+- Operações administrativas usam server functions autenticadas e um cliente de serviço apenas no servidor.
+- Comprovantes ficam em bucket privado e são acessados por URLs assinadas temporárias.
+
+## Sincronização com Lovable
+
+Commits enviados à branch conectada aparecem no editor Lovable. Não reescreva o histórico já publicado com force push, rebase, amend ou squash.
