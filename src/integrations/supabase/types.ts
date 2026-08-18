@@ -153,23 +153,35 @@ export type Database = {
       }
       profiles: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           created_at: string
           full_name: string
           id: string
+          requested_role: Database["public"]["Enums"]["app_role"] | null
+          status: Database["public"]["Enums"]["approval_status"]
           unit_id: string | null
           updated_at: string
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           full_name?: string
           id: string
+          requested_role?: Database["public"]["Enums"]["app_role"] | null
+          status?: Database["public"]["Enums"]["approval_status"]
           unit_id?: string | null
           updated_at?: string
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           full_name?: string
           id?: string
+          requested_role?: Database["public"]["Enums"]["app_role"] | null
+          status?: Database["public"]["Enums"]["approval_status"]
           unit_id?: string | null
           updated_at?: string
         }
@@ -395,6 +407,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_approved: { Args: { _user_id: string }; Returns: boolean }
       list_partners: {
         Args: never
         Returns: {
@@ -437,6 +450,7 @@ export type Database = {
     }
     Enums: {
       app_role: "atendente" | "supervisor" | "socio" | "auditor"
+      approval_status: "pending" | "approved" | "rejected"
       payment_method: "Pix" | "Crédito" | "Débito" | "Dinheiro"
       transaction_category:
         | "Bebida"
@@ -573,6 +587,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["atendente", "supervisor", "socio", "auditor"],
+      approval_status: ["pending", "approved", "rejected"],
       payment_method: ["Pix", "Crédito", "Débito", "Dinheiro"],
       transaction_category: [
         "Bebida",
