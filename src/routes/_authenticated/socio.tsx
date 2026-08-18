@@ -78,10 +78,10 @@ function PartnerDashboard() {
 
   const mutation = useMutation({
     mutationFn: async (vars: { id: string; status: "approved" | "disputed" }) => {
-      const { error } = await supabase
-        .from("partner_withdrawals")
-        .update({ status: vars.status })
-        .eq("id", vars.id);
+      const { error } = await supabase.rpc("respond_partner_withdrawal", {
+        _withdrawal_id: vars.id,
+        _decision: vars.status,
+      });
       if (error) throw error;
       return vars.status;
     },
