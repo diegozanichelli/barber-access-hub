@@ -1,29 +1,18 @@
-import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { Loader2, Users } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
 import { AuditFeed } from "@/components/audit-feed";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { ShiftHistory } from "@/components/shift-history";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { UnitManager } from "@/components/unit-manager";
-import { Button } from "@/components/ui/button";
+import { UserApprovals } from "@/components/user-approvals";
+import { UserManager } from "@/components/user-manager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useSessionProfile } from "@/hooks/use-session-profile";
-import { supabase } from "@/integrations/supabase/client";
-import { listManagedUsers, updateManagedUser } from "@/lib/admin-users.functions";
-import { ROLE_LABELS, ROLE_ORDER, type AppRole } from "@/lib/roles";
+import { requireDashboardRole } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/auditor")({
+  beforeLoad: () => requireDashboardRole("auditor"),
   head: () => ({
     meta: [
       { title: "Painel do Auditor | Caixa Grupo Roots" },
@@ -37,37 +26,15 @@ export const Route = createFileRoute("/_authenticated/auditor")({
   component: AuditorDashboard,
 });
 
-const NO_UNIT = "__none__";
-
 function AuditorDashboard() {
   const { data: profile } = useSessionProfile();
-  const queryClient = useQueryClient();
-  const fetchUsers = useServerFn(listManagedUsers);
-  const saveUser = useServerFn(updateManagedUser);
-  const [drafts, setDrafts] = useState<Record<string, { role: AppRole; unitId: string }>>({});
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedUnitId, setSelectedUnitId] = useState<string>();
 
-  const { data: users, isLoading } = useQuery({
-    queryKey: ["managed-users"],
-    queryFn: () => fetchUsers(),
-  });
-
-  const { data: units } = useQuery({
-    queryKey: ["units"],
-    queryFn: async () => {
-      const { data } = await supabase.from("units").select("id, name").order("name");
-      return data ?? [];
-    },
-  });
-
-  const mutation = useMutation({
-    mutationFn: (vars: { userId: string; role: AppRole; unitId: string | null }) =>
-      saveUser({ data: vars }),
-    onSuccess: () => {
-      toast.success("Usuário atualizado");
-      void queryClient.invalidateQueries({ queryKey: ["managed-users"] });
-    },
-    onError: (error: Error) => toast.error("Erro ao salvar", { description: error.message }),
-  });
+  function viewUnitTransactions(unitId: string) {
+    setSelectedUnitId(unitId);
+    setActiveTab("feed");
+  }
 
   return (
     <DashboardShell
@@ -76,7 +43,7 @@ function AuditorDashboard() {
       subtitle={`${profile?.fullName ?? ""} · Acesso a todas as unidades`.trim()}
       wide
     >
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="feed">Lançamentos</TabsTrigger>
@@ -90,117 +57,20 @@ function AuditorDashboard() {
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-4">
-          <AuditorOverview />
+          <AuditorOverview onViewTransactions={viewUnitTransactions} />
         </TabsContent>
 
         <TabsContent value="feed">
-          <AuditFeed />
+          <AuditFeed selectedUnitId={selectedUnitId} />
         </TabsContent>
 
         <TabsContent value="history">
           <ShiftHistory />
         </TabsContent>
 
-        <TabsContent value="users">
-          <section className="surface-panel p-5">
-            <div className="flex items-center gap-2">
-              <Users className="size-5 text-primary" aria-hidden />
-              <h2 className="text-lg">Gerenciar usuários</h2>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Defina o papel e a unidade de cada usuário da rede.
-            </p>
-
-            {isLoading ? (
-              <div className="mt-6 flex justify-center">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <ul className="mt-4 space-y-4">
-                {(users ?? []).map((user) => {
-                  const draft = drafts[user.id] ?? {
-                    role: (user.role as AppRole | null) ?? "atendente",
-                    unitId: user.unitId ?? NO_UNIT,
-                  };
-                  const dirty =
-                    draft.role !== ((user.role as AppRole | null) ?? "atendente") ||
-                    draft.unitId !== (user.unitId ?? NO_UNIT);
-
-                  return (
-                    <li key={user.id} className="rounded-lg border border-border/60 p-4">
-                      <p className="font-medium">{user.fullName}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
-
-                      <div className="mt-3 grid gap-3">
-                        <Select
-                          value={draft.role}
-                          onValueChange={(role) =>
-                            setDrafts((p) => ({
-                              ...p,
-                              [user.id]: {
-                                role: role as AppRole,
-                                unitId: role === "auditor" ? NO_UNIT : draft.unitId,
-                              },
-                            }))
-                          }
-                        >
-                          <SelectTrigger aria-label={`Papel de ${user.fullName}`}>
-                            <SelectValue placeholder="Papel" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ROLE_ORDER.map((r) => (
-                              <SelectItem key={r} value={r}>
-                                {ROLE_LABELS[r]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        {draft.role === "auditor" ? (
-                          <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                            Acesso a todas as unidades
-                          </div>
-                        ) : (
-                          <Select
-                            value={draft.unitId}
-                            onValueChange={(unitId) =>
-                              setDrafts((p) => ({ ...p, [user.id]: { ...draft, unitId } }))
-                            }
-                          >
-                            <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
-                              <SelectValue placeholder="Unidade" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={NO_UNIT}>Sem unidade</SelectItem>
-                              {(units ?? []).map((u) => (
-                                <SelectItem key={u.id} value={u.id}>
-                                  {u.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-
-                        <Button
-                          size="sm"
-                          disabled={!dirty || mutation.isPending}
-                          onClick={() =>
-                            mutation.mutate({
-                              userId: user.id,
-                              role: draft.role,
-                              unitId: draft.unitId === NO_UNIT ? null : draft.unitId,
-                            })
-                          }
-                        >
-                          Salvar alterações
-                        </Button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+        <TabsContent value="users" className="space-y-4">
+          <UserApprovals />
+          <UserManager />
         </TabsContent>
       </Tabs>
     </DashboardShell>

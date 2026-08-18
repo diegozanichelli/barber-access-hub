@@ -382,13 +382,11 @@ export type Database = {
     Functions: {
       close_shift: {
         Args: {
-          _expected_closing: number
           _notes?: string
           _quantities: Json
           _shift_id: string
-          _total: number
         }
-        Returns: undefined
+        Returns: Json
       }
       create_partner_withdrawal: {
         Args: {
@@ -420,7 +418,6 @@ export type Database = {
         Args: {
           _notes?: string
           _quantities: Json
-          _total: number
           _unit_id: string
         }
         Returns: string
@@ -430,13 +427,19 @@ export type Database = {
           _notes?: string
           _pending_shift_id: string
           _quantities: Json
-          _total: number
         }
         Returns: Json
       }
       resolve_shift_dispute: {
         Args: { _note: string; _shift_id: string }
         Returns: undefined
+      }
+      respond_partner_withdrawal: {
+        Args: {
+          _decision: Database["public"]["Enums"]["withdrawal_status"]
+          _withdrawal_id: string
+        }
+        Returns: Database["public"]["Enums"]["withdrawal_status"]
       }
       resolve_withdrawal_dispute: {
         Args: { _note: string; _withdrawal_id: string }

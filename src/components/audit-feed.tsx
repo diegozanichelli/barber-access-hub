@@ -1,6 +1,16 @@
-import { useMemo, useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Download, Loader2, Undo2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -9,33 +19,77 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipt-thumb";
+import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
-import { useAuditorData } from "@/hooks/use-auditor-data";
+import { friendlyError } from "@/lib/errors";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 
 const ALL = "__all__";
 const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"];
+const PAGE_SIZE = 25;
 
-export function AuditFeed() {
-  const { data, isLoading } = useAuditorData();
+export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
+  const queryClient = useQueryClient();
+  const { data: references } = useAuditorReferences();
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
   const [category, setCategory] = useState(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
+  const [page, setPage] = useState(0);
+  const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
 
-  const rows = useMemo(() => {
-    const list = (data?.transactions ?? []).filter(
-      (t) =>
-        (unitId === ALL || t.unit_id === unitId) &&
-        (type === ALL || t.transaction_type === type) &&
-        (category === ALL || t.category === category),
-    );
-    return [...list].sort((a, b) =>
-      order === "desc"
-        ? b.created_at.localeCompare(a.created_at)
-        : a.created_at.localeCompare(b.created_at),
-    );
-  }, [data, unitId, type, category, order]);
+  useEffect(() => setPage(0), [unitId, type, category, order]);
+  useEffect(() => {
+    if (selectedUnitId) setUnitId(selectedUnitId);
+  }, [selectedUnitId]);
+
+  const reverseMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await supabase.rpc("reverse_transaction", {
+        _transaction_id: id,
+        _reason: reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+        queryClient.invalidateQueries({ queryKey: ["shift-transactions"] }),
+      ]);
+      toast.success("Lançamento estornado", {
+        description:
+          "O valor incorreto foi neutralizado e o histórico de auditoria foi preservado.",
+      });
+      setPendingReversal(null);
+      setReversalReason("");
+    },
+    onError: (error) =>
+      toast.error("Erro ao estornar lançamento", { description: friendlyError(error) }),
+  });
+
+  const { data: pageData, isLoading } = useQuery({
+    queryKey: ["audit-transactions", page, unitId, type, category, order],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      let query = supabase
+        .from("transactions")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: order === "asc" })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      if (type !== ALL) query = query.eq("transaction_type", type);
+      if (category !== ALL) query = query.eq("category", category as TransactionRow["category"]);
+      const { data, error, count } = await query;
+      if (error) throw error;
+      return { rows: (data ?? []) as TransactionRow[], count: count ?? 0 };
+    },
+  });
+  const rows = pageData?.rows ?? [];
+  const count = pageData?.count ?? 0;
 
   function handleExport() {
     const csv = toCSV(
@@ -53,7 +107,7 @@ export function AuditFeed() {
       ],
       rows.map((t) => [
         new Date(t.created_at).toLocaleString("pt-BR"),
-        data?.unitNames[t.unit_id] ?? "",
+        references?.unitNames[t.unit_id] ?? "",
         t.transaction_type === "income"
           ? "Entrada"
           : t.category === "Sangria"
@@ -64,14 +118,14 @@ export function AuditFeed() {
         t.payment_method ?? "",
         Number(t.amount).toFixed(2).replace(".", ","),
         t.description ?? "",
-        data?.names[t.user_id] ?? "",
+        references?.names[t.user_id] ?? "",
         t.photo_url ? "Sim" : "Não",
       ]),
     );
     downloadCSV(`lancamentos-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
-  if (isLoading || !data) {
+  if (isLoading || !references) {
     return (
       <section className="surface-panel flex justify-center p-5">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -85,7 +139,7 @@ export function AuditFeed() {
         <h2 className="text-lg">Feed de lançamentos e provas</h2>
         <Button size="sm" variant="secondary" onClick={handleExport} disabled={rows.length === 0}>
           <Download className="size-4" />
-          Exportar CSV
+          Exportar página CSV
         </Button>
       </div>
 
@@ -96,7 +150,7 @@ export function AuditFeed() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Todas as unidades</SelectItem>
-            {data.units.map((u) => (
+            {references.units.map((u) => (
               <SelectItem key={u.id} value={u.id}>
                 {u.name}
               </SelectItem>
@@ -147,6 +201,8 @@ export function AuditFeed() {
           {rows.map((t) => {
             const income = t.transaction_type === "income";
             const safeDrop = t.category === "Sangria";
+            const isReversal = Boolean(t.reverses_transaction_id);
+            const wasReversed = Boolean(t.reversed_at);
             return (
               <li key={t.id} className="flex items-start gap-3 py-4">
                 <ReceiptThumb
@@ -159,6 +215,11 @@ export function AuditFeed() {
                       {safeDrop ? (
                         <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
                           Sangria · Cofre
+                        </span>
+                      ) : null}
+                      {isReversal || wasReversed ? (
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {isReversal ? "Estorno" : "Estornado"}
                         </span>
                       ) : null}
                       <span className="truncate">
@@ -174,9 +235,9 @@ export function AuditFeed() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {data.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
+                    {references.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
                     {t.payment_method ?? (safeDrop ? "Transferência para o cofre" : "Despesa")} ·{" "}
-                    {data.names[t.user_id] ?? "Usuário"} ·{" "}
+                    {references.names[t.user_id] ?? "Usuário"} ·{" "}
                     {new Date(t.created_at).toLocaleString("pt-BR")}
                   </p>
                   {t.description ? (
@@ -185,12 +246,105 @@ export function AuditFeed() {
                   {!t.photo_url && !safeDrop ? (
                     <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
                   ) : null}
+                  {!isReversal && !wasReversed ? (
+                    <Button
+                      className="mt-2"
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setPendingReversal(t)}
+                    >
+                      <Undo2 className="size-4" /> Estornar erro
+                    </Button>
+                  ) : null}
                 </div>
               </li>
             );
           })}
         </ul>
       )}
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+        <p className="text-xs text-muted-foreground">
+          {count === 0
+            ? "0 resultados"
+            : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, count)} de ${count}`}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            <ChevronLeft className="size-4" /> Anterior
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={(page + 1) * PAGE_SIZE >= count}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Próxima <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
+
+      <Dialog
+        open={Boolean(pendingReversal)}
+        onOpenChange={(open) => {
+          if (!open && !reverseMutation.isPending) {
+            setPendingReversal(null);
+            setReversalReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Estornar lançamento incorreto?</DialogTitle>
+            <DialogDescription>
+              O registro não será apagado: um estorno compensatório será criado para corrigir o
+              caixa sem perder o histórico da auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingReversal ? (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
+              <p className="font-medium">
+                {pendingReversal.category} · {formatBRL(pendingReversal.amount)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {references.unitNames[pendingReversal.unit_id] ?? "Unidade"} ·{" "}
+                {new Date(pendingReversal.created_at).toLocaleString("pt-BR")}
+              </p>
+            </div>
+          ) : null}
+          <Textarea
+            value={reversalReason}
+            onChange={(event) => setReversalReason(event.target.value)}
+            placeholder="Informe o motivo da correção"
+            aria-label="Motivo do estorno"
+            disabled={reverseMutation.isPending}
+          />
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setPendingReversal(null)}
+              disabled={reverseMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={reversalReason.trim().length < 5 || reverseMutation.isPending}
+              onClick={() => {
+                if (!pendingReversal) return;
+                reverseMutation.mutate({ id: pendingReversal.id, reason: reversalReason.trim() });
+              }}
+            >
+              {reverseMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Confirmar estorno
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
