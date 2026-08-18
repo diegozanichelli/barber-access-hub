@@ -44,12 +44,20 @@ export const Route = createFileRoute("/auth")({
 async function routeForCurrentUser(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
   if (!data.user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("status")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  if (profile && profile.status !== "approved") return "/pendente";
+
   const { data: roles } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", data.user.id);
   const role = roles?.[0]?.role as AppRole | undefined;
-  return role ? ROLE_ROUTES[role] : "/atendente";
+  return role ? ROLE_ROUTES[role] : "/pendente";
 }
 
 function AuthPage() {
