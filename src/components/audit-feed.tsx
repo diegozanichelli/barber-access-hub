@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -11,31 +12,42 @@ import {
 import { ReceiptThumb } from "@/components/receipt-thumb";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
-import { useAuditorData } from "@/hooks/use-auditor-data";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 
 const ALL = "__all__";
 const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"];
+const PAGE_SIZE = 25;
 
 export function AuditFeed() {
-  const { data, isLoading } = useAuditorData();
+  const { data: references } = useAuditorReferences();
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
   const [category, setCategory] = useState(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
+  const [page, setPage] = useState(0);
 
-  const rows = useMemo(() => {
-    const list = (data?.transactions ?? []).filter(
-      (t) =>
-        (unitId === ALL || t.unit_id === unitId) &&
-        (type === ALL || t.transaction_type === type) &&
-        (category === ALL || t.category === category),
-    );
-    return [...list].sort((a, b) =>
-      order === "desc"
-        ? b.created_at.localeCompare(a.created_at)
-        : a.created_at.localeCompare(b.created_at),
-    );
-  }, [data, unitId, type, category, order]);
+  useEffect(() => setPage(0), [unitId, type, category, order]);
+
+  const { data: pageData, isLoading } = useQuery({
+    queryKey: ["audit-transactions", page, unitId, type, category, order],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      let query = supabase
+        .from("transactions")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: order === "asc" })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      if (type !== ALL) query = query.eq("transaction_type", type);
+      if (category !== ALL) query = query.eq("category", category as TransactionRow["category"]);
+      const { data, error, count } = await query;
+      if (error) throw error;
+      return { rows: (data ?? []) as TransactionRow[], count: count ?? 0 };
+    },
+  });
+  const rows = pageData?.rows ?? [];
+  const count = pageData?.count ?? 0;
 
   function handleExport() {
     const csv = toCSV(
@@ -53,7 +65,7 @@ export function AuditFeed() {
       ],
       rows.map((t) => [
         new Date(t.created_at).toLocaleString("pt-BR"),
-        data?.unitNames[t.unit_id] ?? "",
+        references?.unitNames[t.unit_id] ?? "",
         t.transaction_type === "income"
           ? "Entrada"
           : t.category === "Sangria"
@@ -64,14 +76,14 @@ export function AuditFeed() {
         t.payment_method ?? "",
         Number(t.amount).toFixed(2).replace(".", ","),
         t.description ?? "",
-        data?.names[t.user_id] ?? "",
+        references?.names[t.user_id] ?? "",
         t.photo_url ? "Sim" : "Não",
       ]),
     );
     downloadCSV(`lancamentos-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
-  if (isLoading || !data) {
+  if (isLoading || !references) {
     return (
       <section className="surface-panel flex justify-center p-5">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -85,7 +97,7 @@ export function AuditFeed() {
         <h2 className="text-lg">Feed de lançamentos e provas</h2>
         <Button size="sm" variant="secondary" onClick={handleExport} disabled={rows.length === 0}>
           <Download className="size-4" />
-          Exportar CSV
+          Exportar página CSV
         </Button>
       </div>
 
@@ -96,7 +108,7 @@ export function AuditFeed() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Todas as unidades</SelectItem>
-            {data.units.map((u) => (
+            {references.units.map((u) => (
               <SelectItem key={u.id} value={u.id}>
                 {u.name}
               </SelectItem>
@@ -174,9 +186,9 @@ export function AuditFeed() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {data.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
+                    {references.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
                     {t.payment_method ?? (safeDrop ? "Transferência para o cofre" : "Despesa")} ·{" "}
-                    {data.names[t.user_id] ?? "Usuário"} ·{" "}
+                    {references.names[t.user_id] ?? "Usuário"} ·{" "}
                     {new Date(t.created_at).toLocaleString("pt-BR")}
                   </p>
                   {t.description ? (
@@ -191,6 +203,31 @@ export function AuditFeed() {
           })}
         </ul>
       )}
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+        <p className="text-xs text-muted-foreground">
+          {count === 0
+            ? "0 resultados"
+            : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, count)} de ${count}`}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            <ChevronLeft className="size-4" /> Anterior
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={(page + 1) * PAGE_SIZE >= count}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Próxima <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
     </section>
   );
 }

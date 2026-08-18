@@ -1,8 +1,7 @@
 import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Loader2, Scissors } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { ROLE_ROUTES, type AppRole } from "@/lib/roles";
+import { destinationForAccess, resolveAccessState } from "@/lib/access";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -30,28 +29,9 @@ function Index() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        navigate({ to: "/auth", replace: true });
-        return;
-      }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("status")
-        .eq("id", data.user.id)
-        .maybeSingle();
-      if (profile && profile.status !== "approved") {
-        navigate({ to: "/pendente", replace: true });
-        return;
-      }
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", data.user.id);
-      const role = roles?.[0]?.role as AppRole | undefined;
-      navigate({ to: role ? ROLE_ROUTES[role] : "/pendente", replace: true });
-    })();
+    void resolveAccessState().then((access) => {
+      navigate({ to: destinationForAccess(access), replace: true });
+    });
   }, [navigate]);
 
   return (

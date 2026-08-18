@@ -22,8 +22,10 @@ import { useSessionProfile } from "@/hooks/use-session-profile";
 import { supabase } from "@/integrations/supabase/client";
 import { listManagedUsers, updateManagedUser } from "@/lib/admin-users.functions";
 import { ROLE_LABELS, ROLE_ORDER, type AppRole } from "@/lib/roles";
+import { requireDashboardRole } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/auditor")({
+  beforeLoad: () => requireDashboardRole("auditor"),
   head: () => ({
     meta: [
       { title: "Painel do Auditor | Caixa Grupo Roots" },

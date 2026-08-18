@@ -15,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ROLE_LABELS, ROLE_ROUTES, type AppRole } from "@/lib/roles";
+import { destinationForAccess, resolveAccessState } from "@/lib/access";
+import { ROLE_LABELS, type AppRole } from "@/lib/roles";
 
 const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
 
@@ -42,22 +43,8 @@ export const Route = createFileRoute("/auth")({
 });
 
 async function routeForCurrentUser(): Promise<string | null> {
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return null;
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("status")
-    .eq("id", data.user.id)
-    .maybeSingle();
-  if (profile && profile.status !== "approved") return "/pendente";
-
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", data.user.id);
-  const role = roles?.[0]?.role as AppRole | undefined;
-  return role ? ROLE_ROUTES[role] : "/pendente";
+  const access = await resolveAccessState();
+  return access.kind === "anonymous" ? null : destinationForAccess(access);
 }
 
 function AuthPage() {
@@ -192,10 +179,7 @@ function AuthPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="signup-role">Função desejada</Label>
-                <Select
-                  value={requestedRole}
-                  onValueChange={(v) => setRequestedRole(v as AppRole)}
-                >
+                <Select value={requestedRole} onValueChange={(v) => setRequestedRole(v as AppRole)}>
                   <SelectTrigger id="signup-role">
                     <SelectValue placeholder="Selecione a função" />
                   </SelectTrigger>
