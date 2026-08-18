@@ -148,12 +148,29 @@ function PartnerDashboard() {
                       variant="destructive"
                       className="h-12"
                       disabled={mutation.isPending}
-                      onClick={() => mutation.mutate({ id: w.id, status: "disputed" })}
+                      onClick={() => {
+                        if (disputeId !== w.id) {
+                          setDisputeId(w.id);
+                          return;
+                        }
+                        setDisputeId(null);
+                        mutation.mutate({ id: w.id, status: "disputed" });
+                      }}
                     >
                       <X className="size-4" />
-                      Contestar
+                      {disputeId === w.id ? "Confirmar contestação" : "Contestar"}
                     </Button>
                   </div>
+                  {disputeId === w.id ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Contestar aciona a Auditoria. Toque de novo para confirmar ou{" "}
+                      <button type="button" className="underline" onClick={() => setDisputeId(null)}>
+                        cancelar
+                      </button>
+                      .
+                    </p>
+                  ) : null}
+
                 </li>
               );
             })}
