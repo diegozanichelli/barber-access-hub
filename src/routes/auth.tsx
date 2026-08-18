@@ -15,7 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ROLE_ROUTES, type AppRole } from "@/lib/roles";
+import { ROLE_LABELS, ROLE_ROUTES, type AppRole } from "@/lib/roles";
+
+const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
