@@ -380,6 +380,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      correct_opening_cash_count: {
+        Args: { _quantities: Json; _reason: string; _shift_id: string }
+        Returns: number
+      }
       close_shift: {
         Args: {
           _notes?: string

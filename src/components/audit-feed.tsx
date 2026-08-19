@@ -19,12 +19,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipt-thumb";
+import { BlindCalculator } from "@/components/blind-calculator";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import { friendlyError } from "@/lib/errors";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
+import type { CashQuantities } from "@/lib/cash";
 
 const ALL = "__all__";
 const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"];
@@ -40,6 +42,12 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [page, setPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
   const [reversalReason, setReversalReason] = useState("");
+  const [openingToCorrect, setOpeningToCorrect] = useState<{
+    id: string;
+    unitId: string;
+    total: number;
+    openedAt: string;
+  } | null>(null);
 
   useEffect(() => setPage(0), [unitId, type, category, order]);
   useEffect(() => {
@@ -69,6 +77,54 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     },
     onError: (error) =>
       toast.error("Erro ao estornar lançamento", { description: friendlyError(error) }),
+  });
+
+  const { data: openings = [] } = useQuery({
+    queryKey: ["audit-active-openings", unitId],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      let query = supabase
+        .from("shifts")
+        .select("id, unit_id, actual_opening_total, opened_at")
+        .eq("status", "open")
+        .order("opened_at", { ascending: false });
+      if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const correctOpeningMutation = useMutation({
+    mutationFn: async ({
+      shiftId,
+      quantities,
+      reason,
+    }: {
+      shiftId: string;
+      quantities: CashQuantities;
+      reason: string;
+    }) => {
+      const { error } = await supabase.rpc("correct_opening_cash_count", {
+        _shift_id: shiftId,
+        _quantities: quantities,
+        _reason: reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-active-openings"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+        queryClient.invalidateQueries({ queryKey: ["audit-shift"] }),
+      ]);
+      toast.success("Abertura corrigida", {
+        description: "O caixa foi recalculado e a alteração ficou registrada na auditoria.",
+      });
+      setOpeningToCorrect(null);
+    },
+    onError: (error) =>
+      toast.error("Erro ao corrigir abertura", { description: friendlyError(error) }),
   });
 
   const { data: pageData, isLoading } = useQuery({
@@ -193,6 +249,42 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
           </SelectContent>
         </Select>
       </div>
+
+      {openings.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          <h3 className="text-sm font-semibold">Aberturas de caixa ativas</h3>
+          {openings.map((opening) => (
+            <div
+              key={opening.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-card p-3"
+            >
+              <div>
+                <p className="font-medium">
+                  Abertura · {references.unitNames[opening.unit_id] ?? "Unidade"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(opening.opened_at).toLocaleString("pt-BR")} · Valor contado{" "}
+                  {formatBRL(opening.actual_opening_total)}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() =>
+                  setOpeningToCorrect({
+                    id: opening.id,
+                    unitId: opening.unit_id,
+                    total: opening.actual_opening_total,
+                    openedAt: opening.opened_at,
+                  })
+                }
+              >
+                Corrigir abertura
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {rows.length === 0 ? (
         <p className="mt-6 text-sm text-muted-foreground">Nenhum lançamento encontrado.</p>
@@ -345,6 +437,28 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BlindCalculator
+        open={Boolean(openingToCorrect)}
+        onOpenChange={(open) => !open && setOpeningToCorrect(null)}
+        title="Corrigir contagem de abertura"
+        description={`Refaça a contagem física. O valor atual é ${formatBRL(openingToCorrect?.total ?? 0)}. Informe o motivo no campo de observações.`}
+        submitLabel="Salvar correção"
+        submitting={correctOpeningMutation.isPending}
+        onSubmit={({ quantities, notes }) => {
+          if (!openingToCorrect) return;
+          if (notes.trim().length < 5) {
+            toast.error("Informe o motivo da correção", {
+              description: "Use pelo menos 5 caracteres no campo de observações.",
+            });
+            return;
+          }
+          correctOpeningMutation.mutate({
+            shiftId: openingToCorrect.id,
+            quantities,
+            reason: notes.trim(),
+          });
+        }}
+      />
     </section>
   );
 }
