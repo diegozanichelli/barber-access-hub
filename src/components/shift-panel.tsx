@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
+import { openShiftOnServer } from "@/lib/cash-operations.functions";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
@@ -42,6 +44,7 @@ const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
 
 export function ShiftPanel({ userId, unitId }: Props) {
   const queryClient = useQueryClient();
+  const openShiftCompatibility = useServerFn(openShiftOnServer);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
@@ -128,6 +131,12 @@ export function ShiftPanel({ userId, unitId }: Props) {
         _quantities: payload.quantities,
         ...(payload.notes ? { _notes: payload.notes } : {}),
       });
+      if (error?.code === "PGRST202" || error?.message.includes("schema cache")) {
+        const result = await openShiftCompatibility({
+          data: { unitId, quantities: payload.quantities, notes: payload.notes },
+        });
+        return result.total;
+      }
       if (error) throw error;
       return payload.total;
     },
