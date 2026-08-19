@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
 import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
+import { TransactionChangeRequestDialog } from "@/components/transaction-change-request-dialog";
 import { WithdrawalDialog } from "@/components/withdrawal-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +46,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [changeRequestId, setChangeRequestId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ label: string; total: number } | null>(null);
 
   const shiftsQuery = useQuery({
@@ -466,6 +468,15 @@ export function ShiftPanel({ userId, unitId }: Props) {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {!isReversal && !reversed ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setChangeRequestId(t.id)}
+                        >
+                          Solicitar alteração
+                        </Button>
+                      ) : null}
                       {t.photo_url ? (
                         <Button
                           size="icon"
@@ -542,6 +553,11 @@ export function ShiftPanel({ userId, unitId }: Props) {
           />
         </>
       ) : null}
+      <TransactionChangeRequestDialog
+        transactionId={changeRequestId}
+        open={Boolean(changeRequestId)}
+        onOpenChange={(open) => !open && setChangeRequestId(null)}
+      />
     </>
   );
 }

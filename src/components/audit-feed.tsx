@@ -126,6 +126,54 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     onError: (error) =>
       toast.error("Erro ao corrigir abertura", { description: friendlyError(error) }),
   });
+  const deleteOpeningMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await supabase.rpc("delete_empty_open_shift", {
+        _shift_id: id,
+        _reason: reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-active-openings"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+      ]);
+      toast.success("Abertura excluída", { description: "A cópia de auditoria foi preservada." });
+    },
+    onError: (error) =>
+      toast.error("Erro ao excluir abertura", { description: friendlyError(error) }),
+  });
+  const masterDeleteTransaction = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { data: requestId, error: requestError } = await supabase.rpc(
+        "request_transaction_change",
+        {
+          _transaction_id: id,
+          _action: "delete",
+          _reason: reason,
+        },
+      );
+      if (requestError) throw requestError;
+      const { error } = await supabase.rpc("decide_transaction_change_request", {
+        _request_id: requestId,
+        _approve: true,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+        queryClient.invalidateQueries({ queryKey: ["transaction-change-requests"] }),
+      ]);
+      toast.success("Lançamento excluído", {
+        description: "A cópia para auditoria foi preservada.",
+      });
+    },
+    onError: (error) =>
+      toast.error("Erro ao excluir lançamento", { description: friendlyError(error) }),
+  });
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ["audit-transactions", page, unitId, type, category, order],
@@ -281,6 +329,17 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
               >
                 Corrigir abertura
               </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  const reason = window.prompt("Motivo da exclusão da abertura:");
+                  if (reason && reason.trim().length >= 5)
+                    deleteOpeningMutation.mutate({ id: opening.id, reason: reason.trim() });
+                }}
+              >
+                Excluir abertura
+              </Button>
             </div>
           ))}
         </div>
@@ -339,14 +398,22 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                     <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
                   ) : null}
                   {!isReversal && !wasReversed ? (
-                    <Button
-                      className="mt-2"
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => setPendingReversal(t)}
-                    >
-                      <Undo2 className="size-4" /> Estornar erro
-                    </Button>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => setPendingReversal(t)}>
+                        <Undo2 className="size-4" /> Estornar erro
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          const reason = window.prompt("Motivo da exclusão definitiva:");
+                          if (reason && reason.trim().length >= 5)
+                            masterDeleteTransaction.mutate({ id: t.id, reason: reason.trim() });
+                        }}
+                      >
+                        Excluir definitivamente
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
               </li>

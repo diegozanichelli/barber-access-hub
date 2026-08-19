@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AuditFeed } from "@/components/audit-feed";
+import { ChangeRequests } from "@/components/change-requests";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { ShiftHistory } from "@/components/shift-history";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -44,12 +45,13 @@ function AuditorDashboard() {
       wide
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="feed">Lançamentos</TabsTrigger>
           <TabsTrigger value="history">Turnos</TabsTrigger>
           <TabsTrigger value="units">Unidades</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
+          <TabsTrigger value="requests">Solicitações</TabsTrigger>
         </TabsList>
 
         <TabsContent value="units">
@@ -71,6 +73,9 @@ function AuditorDashboard() {
         <TabsContent value="users" className="space-y-4">
           <UserApprovals />
           <UserManager />
+        </TabsContent>
+        <TabsContent value="requests">
+          <ChangeRequests />
         </TabsContent>
       </Tabs>
     </DashboardShell>

@@ -384,6 +384,25 @@ export type Database = {
         Args: { _quantities: Json; _reason: string; _shift_id: string }
         Returns: number
       }
+      decide_transaction_change_request: {
+        Args: { _approve: boolean; _decision_note?: string; _request_id: string }
+        Returns: undefined
+      }
+      delete_empty_open_shift: {
+        Args: { _reason: string; _shift_id: string }
+        Returns: undefined
+      }
+      list_transaction_change_requests: { Args: never; Returns: Json[] }
+      request_transaction_change: {
+        Args: {
+          _action: "edit" | "delete"
+          _proposed_amount?: number | null
+          _proposed_description?: string | null
+          _reason: string
+          _transaction_id: string
+        }
+        Returns: string
+      }
       close_shift: {
         Args: {
           _notes?: string
