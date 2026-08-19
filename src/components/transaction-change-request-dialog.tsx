@@ -39,11 +39,6 @@ export function TransactionChangeRequestDialog({
     setReason("");
   }
 
-  function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen && !mutation.isPending) resetForm();
-    onOpenChange(nextOpen);
-  }
-
   const mutation = useMutation({
     mutationFn: async () => {
       if (!transactionId) return;
@@ -70,6 +65,11 @@ export function TransactionChangeRequestDialog({
     onError: (error) =>
       toast.error("Erro ao solicitar alteração", { description: friendlyError(error) }),
   });
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && !mutation.isPending) resetForm();
+    onOpenChange(nextOpen);
+  }
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
