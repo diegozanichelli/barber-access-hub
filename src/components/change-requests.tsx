@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, X } from "lucide-react";
+import { AlertTriangle, Check, Loader2, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +21,14 @@ type RequestRow = {
 export function ChangeRequests() {
   const client = useQueryClient();
   const [busyId, setBusyId] = useState<string>();
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ["transaction-change-requests"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("list_transaction_change_requests");
@@ -57,6 +64,36 @@ export function ChangeRequests() {
       <div className="surface-panel flex justify-center p-5">
         <Loader2 className="size-5 animate-spin" />
       </div>
+    );
+  if (isError)
+    return (
+      <section className="surface-panel p-5" role="alert">
+        <div className="flex items-start gap-3 text-destructive">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+          <div>
+            <h2 className="font-semibold">Não foi possível carregar as solicitações</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{friendlyError(error)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Se a mensagem mencionar schema cache ou função inexistente, aplique as migrações do
+              Supabase antes de tentar novamente.
+            </p>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="secondary"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      </section>
     );
   return (
     <section className="surface-panel p-5">
