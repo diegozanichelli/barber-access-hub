@@ -1,8 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
 
 const roleSchema = z.enum(["atendente", "supervisor", "socio", "auditor"]);
+const approvableRoleSchema = z.enum(["atendente", "supervisor", "socio"]);
 
 export type ManagedUser = {
   id: string;
@@ -22,7 +25,7 @@ export type PendingUser = {
   createdAt: string;
 };
 
-async function assertAuditor(context: { supabase: any; userId: string }) {
+async function assertAuditor(context: { supabase: SupabaseClient<Database>; userId: string }) {
   const { data: isAuditor } = await context.supabase.rpc("has_role", {
     _user_id: context.userId,
     _role: "auditor",
@@ -90,12 +93,12 @@ export const listPendingUsers = createServerFn({ method: "GET" })
 
 export const approveUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) =>
+  .validator((data: unknown) =>
     z
       .object({
         userId: z.string().uuid(),
-        role: roleSchema,
-        unitId: z.string().uuid().nullable(),
+        role: approvableRoleSchema,
+        unitId: z.string().uuid(),
       })
       .parse(data),
   )
@@ -106,20 +109,19 @@ export const approveUser = createServerFn({ method: "POST" })
     const { error: delError } = await supabaseAdmin
       .from("user_roles")
       .delete()
-      .eq("user_id", data.userId)
-      .neq("role", data.role);
+      .eq("user_id", data.userId);
     if (delError) throw delError;
 
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id,role" });
+      .insert({ user_id: data.userId, role: data.role });
     if (roleError) throw roleError;
 
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({
         status: "approved",
-        unit_id: data.role === "auditor" ? null : data.unitId,
+        unit_id: data.unitId,
         approved_by: context.userId,
         approved_at: new Date().toISOString(),
       })
@@ -131,7 +133,7 @@ export const approveUser = createServerFn({ method: "POST" })
 
 export const rejectUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ userId: z.string().uuid() }).parse(data))
+  .validator((data: unknown) => z.object({ userId: z.string().uuid() }).parse(data))
   .handler(async ({ context, data }) => {
     await assertAuditor(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -152,7 +154,7 @@ export const rejectUser = createServerFn({ method: "POST" })
 
 export const updateManagedUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) =>
+  .validator((data: unknown) =>
     z
       .object({
         userId: z.string().uuid(),
@@ -175,13 +177,12 @@ export const updateManagedUser = createServerFn({ method: "POST" })
     const { error: delError } = await supabaseAdmin
       .from("user_roles")
       .delete()
-      .eq("user_id", data.userId)
-      .neq("role", data.role);
+      .eq("user_id", data.userId);
     if (delError) throw delError;
 
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id,role" });
+      .insert({ user_id: data.userId, role: data.role });
     if (roleError) throw roleError;
 
     const { error: profileError } = await supabaseAdmin
@@ -201,7 +202,7 @@ export const updateManagedUser = createServerFn({ method: "POST" })
 
 export const resetUserPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) =>
+  .validator((data: unknown) =>
     z
       .object({
         userId: z.string().uuid(),
