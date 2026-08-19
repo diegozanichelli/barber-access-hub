@@ -40,7 +40,6 @@ export type WithdrawalRow = {
   status: string;
   created_at: string;
 };
-
 export type CashCountRow = {
   id: string;
   shift_id: string;
@@ -62,49 +61,94 @@ export type CashCountRow = {
   coins_005: number;
 };
 
-export type AuditorData = {
+export type AuditorReferences = {
   units: UnitRow[];
-  shifts: ShiftRow[];
-  transactions: TransactionRow[];
-  withdrawals: WithdrawalRow[];
-  cashCounts: CashCountRow[];
   names: Record<string, string>;
   unitNames: Record<string, string>;
 };
 
+export function useAuditorReferences() {
+  return useQuery<AuditorReferences>({
+    queryKey: ["auditor-references"],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const [unitsRes, profilesRes] = await Promise.all([
+        supabase.from("units").select("id, name").order("name"),
+        supabase.from("profiles").select("id, full_name"),
+      ]);
+      if (unitsRes.error) throw unitsRes.error;
+      if (profilesRes.error) throw profilesRes.error;
+      const units = (unitsRes.data ?? []) as UnitRow[];
+      return {
+        units,
+        names: Object.fromEntries(
+          (profilesRes.data ?? []).map((p) => [p.id, p.full_name?.trim() || "Usuário"]),
+        ),
+        unitNames: Object.fromEntries(units.map((unit) => [unit.id, unit.name])),
+      };
+    },
+  });
+}
+
+export type AuditorData = AuditorReferences & {
+  shifts: ShiftRow[];
+  transactions: TransactionRow[];
+  withdrawals: WithdrawalRow[];
+  safeBalances: Record<string, number>;
+};
+
+/** Overview fetches only active/disputed records; historical lists are paginated separately. */
 export function useAuditorData() {
   return useQuery<AuditorData>({
     queryKey: ["auditor-data"],
     refetchInterval: 30_000,
     queryFn: async () => {
-      const [unitsRes, shiftsRes, txRes, wdRes, ccRes, profRes] = await Promise.all([
+      const [unitsRes, shiftsRes, withdrawalsRes, profilesRes] = await Promise.all([
         supabase.from("units").select("id, name").order("name"),
-        supabase.from("shifts").select("*").order("opened_at", { ascending: false }),
-        supabase.from("transactions").select("*").order("created_at", { ascending: false }),
-        supabase.from("partner_withdrawals").select("*").order("created_at", { ascending: false }),
-        supabase.from("cash_counts").select("*").order("created_at", { ascending: false }),
+        supabase
+          .from("shifts")
+          .select("*")
+          .in("status", ["open", "pending_handover", "disputed"])
+          .order("opened_at", { ascending: false }),
+        supabase
+          .from("partner_withdrawals")
+          .select("*")
+          .eq("status", "disputed")
+          .order("created_at", { ascending: false }),
         supabase.from("profiles").select("id, full_name"),
       ]);
-
       const firstError =
-        unitsRes.error || shiftsRes.error || txRes.error || wdRes.error || ccRes.error;
+        unitsRes.error || shiftsRes.error || withdrawalsRes.error || profilesRes.error;
       if (firstError) throw firstError;
 
-      const names: Record<string, string> = {};
-      for (const p of profRes.data ?? []) {
-        names[p.id] = (p.full_name || "").trim() || "Usuário";
-      }
-      const unitNames: Record<string, string> = {};
-      for (const u of unitsRes.data ?? []) unitNames[u.id] = u.name;
+      const units = (unitsRes.data ?? []) as UnitRow[];
+      const shifts = (shiftsRes.data ?? []) as ShiftRow[];
+      const activeIds = shifts
+        .filter((shift) => shift.status === "open" || shift.status === "pending_handover")
+        .map((shift) => shift.id);
+      const transactionsRes = activeIds.length
+        ? await supabase.from("transactions").select("*").in("shift_id", activeIds)
+        : { data: [], error: null };
+      if (transactionsRes.error) throw transactionsRes.error;
+
+      const balances = await Promise.all(
+        units.map(async (unit) => {
+          const { data, error } = await supabase.rpc("unit_safe_balance", { _unit_id: unit.id });
+          if (error) throw error;
+          return [unit.id, Number(data ?? 0)] as const;
+        }),
+      );
 
       return {
-        units: (unitsRes.data ?? []) as UnitRow[],
-        shifts: (shiftsRes.data ?? []) as ShiftRow[],
-        transactions: (txRes.data ?? []) as TransactionRow[],
-        withdrawals: (wdRes.data ?? []) as WithdrawalRow[],
-        cashCounts: (ccRes.data ?? []) as CashCountRow[],
-        names,
-        unitNames,
+        units,
+        shifts,
+        transactions: (transactionsRes.data ?? []) as TransactionRow[],
+        withdrawals: (withdrawalsRes.data ?? []) as WithdrawalRow[],
+        safeBalances: Object.fromEntries(balances),
+        names: Object.fromEntries(
+          (profilesRes.data ?? []).map((p) => [p.id, p.full_name?.trim() || "Usuário"]),
+        ),
+        unitNames: Object.fromEntries(units.map((unit) => [unit.id, unit.name])),
       };
     },
   });

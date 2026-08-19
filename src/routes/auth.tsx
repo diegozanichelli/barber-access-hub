@@ -15,12 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ROLE_LABELS, ROLE_ROUTES, type AppRole } from "@/lib/roles";
+import { destinationForAccess, resolveAccessState } from "@/lib/access";
+import { friendlyError } from "@/lib/errors";
+import { ROLE_LABELS, type AppRole } from "@/lib/roles";
 
 const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
 
 export const Route = createFileRoute("/auth")({
-  ssr: false,
   head: () => ({
     meta: [
       { title: "Entrar | Caixa Grupo Roots - Auditoria de Caixa" },
@@ -42,22 +43,8 @@ export const Route = createFileRoute("/auth")({
 });
 
 async function routeForCurrentUser(): Promise<string | null> {
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return null;
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("status")
-    .eq("id", data.user.id)
-    .maybeSingle();
-  if (profile && profile.status !== "approved") return "/pendente";
-
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", data.user.id);
-  const role = roles?.[0]?.role as AppRole | undefined;
-  return role ? ROLE_ROUTES[role] : "/pendente";
+  const access = await resolveAccessState();
+  return access.kind === "anonymous" ? null : destinationForAccess(access);
 }
 
 function AuthPage() {
@@ -79,9 +66,13 @@ function AuthPage() {
   });
 
   useEffect(() => {
-    routeForCurrentUser().then((to) => {
-      if (to) navigate({ to, replace: true });
-    });
+    void routeForCurrentUser()
+      .then((to) => {
+        if (to) navigate({ to, replace: true });
+      })
+      .catch((error: unknown) => {
+        toast.error("Não foi possível verificar a sessão", { description: friendlyError(error) });
+      });
   }, [navigate]);
 
   async function handleSignIn(e: React.FormEvent) {
@@ -93,9 +84,16 @@ function AuthPage() {
       toast.error("Não foi possível entrar", { description: error.message });
       return;
     }
-    const to = (await routeForCurrentUser()) ?? "/pendente";
-    setLoading(false);
-    navigate({ to, replace: true });
+    try {
+      const to = (await routeForCurrentUser()) ?? "/pendente";
+      navigate({ to, replace: true });
+    } catch (accessError) {
+      toast.error("Não foi possível verificar seu acesso", {
+        description: friendlyError(accessError),
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSignUp(e: React.FormEvent) {
@@ -192,10 +190,7 @@ function AuthPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="signup-role">Função desejada</Label>
-                <Select
-                  value={requestedRole}
-                  onValueChange={(v) => setRequestedRole(v as AppRole)}
-                >
+                <Select value={requestedRole} onValueChange={(v) => setRequestedRole(v as AppRole)}>
                   <SelectTrigger id="signup-role">
                     <SelectValue placeholder="Selecione a função" />
                   </SelectTrigger>
