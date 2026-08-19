@@ -115,6 +115,57 @@ export type Database = {
           },
         ]
       }
+      transaction_change_requests: {
+        Row: {
+          action: "edit" | "delete"
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: string
+          proposed_amount: number | null
+          proposed_description: string | null
+          reason: string
+          requested_by: string
+          status: "pending" | "approved" | "rejected"
+          transaction_id: string | null
+          transaction_snapshot: Json
+          unit_id: string
+        }
+        Insert: {
+          action: "edit" | "delete"
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason: string
+          requested_by: string
+          status?: "pending" | "approved" | "rejected"
+          transaction_id?: string | null
+          transaction_snapshot: Json
+          unit_id: string
+        }
+        Update: {
+          action?: "edit" | "delete"
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason?: string
+          requested_by?: string
+          status?: "pending" | "approved" | "rejected"
+          transaction_id?: string | null
+          transaction_snapshot?: Json
+          unit_id?: string
+        }
+        Relationships: []
+      }
       partner_withdrawals: {
         Row: {
           amount: number
