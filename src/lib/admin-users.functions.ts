@@ -33,34 +33,66 @@ async function assertAuditor(context: { supabase: SupabaseClient<Database>; user
   if (!isAuditor) throw new Error("Acesso restrito ao auditor.");
 }
 
+function hasAdminCredentials() {
+  return Boolean(process.env["SUPABASE_URL"] && process.env["SUPABASE_SERVICE_ROLE_KEY"]);
+}
+
 export const listManagedUsers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<ManagedUser[]> => {
     await assertAuditor(context);
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: authUsers, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-    if (error) throw error;
-
-    const [{ data: profiles }, { data: roles }] = await Promise.all([
-      supabaseAdmin.from("profiles").select("id, full_name, unit_id, status"),
-      supabaseAdmin.from("user_roles").select("user_id, role"),
-    ]);
-
-    return authUsers.users
-      .filter((u) => (profiles?.find((p) => p.id === u.id)?.status ?? "approved") === "approved")
-      .map((u) => {
-        const profile = profiles?.find((p) => p.id === u.id);
-        const role = roles?.find((r) => r.user_id === u.id);
-        return {
-          id: u.id,
-          email: u.email ?? null,
-          fullName: profile?.full_name?.trim() || u.email?.split("@")[0] || "Usuário",
-          role: role?.role ?? null,
-          unitId: profile?.unit_id ?? null,
-          createdAt: u.created_at,
-        };
+    if (hasAdminCredentials()) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: authUsers, error } = await supabaseAdmin.auth.admin.listUsers({
+        perPage: 1000,
       });
+      if (error) throw error;
+      const [{ data: profiles }, { data: roles }] = await Promise.all([
+        supabaseAdmin.from("profiles").select("id, full_name, unit_id, status"),
+        supabaseAdmin.from("user_roles").select("user_id, role"),
+      ]);
+      return authUsers.users
+        .filter(
+          (user) =>
+            (profiles?.find((profile) => profile.id === user.id)?.status ?? "approved") ===
+            "approved",
+        )
+        .map((user) => {
+          const profile = profiles?.find((item) => item.id === user.id);
+          const role = roles?.find((item) => item.user_id === user.id);
+          return {
+            id: user.id,
+            email: user.email ?? null,
+            fullName: profile?.full_name?.trim() || user.email?.split("@")[0] || "Usuário",
+            role: role?.role ?? null,
+            unitId: profile?.unit_id ?? null,
+            createdAt: user.created_at,
+          };
+        });
+    }
+
+    const [profilesResult, rolesResult] = await Promise.all([
+      context.supabase
+        .from("profiles")
+        .select("id, full_name, unit_id, status, created_at")
+        .eq("status", "approved"),
+      context.supabase.from("user_roles").select("user_id, role"),
+    ]);
+    if (profilesResult.error) throw profilesResult.error;
+    if (rolesResult.error) throw rolesResult.error;
+
+    return (profilesResult.data ?? []).map((profile) => {
+      const role = rolesResult.data?.find((item) => item.user_id === profile.id);
+      return {
+        id: profile.id,
+        email: null,
+        fullName: profile.full_name?.trim() || "Usuário",
+        role: role?.role ?? null,
+        unitId: profile.unit_id ?? null,
+        createdAt: profile.created_at,
+      };
+    });
   });
 
 export const listPendingUsers = createServerFn({ method: "GET" })
@@ -68,22 +100,34 @@ export const listPendingUsers = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<PendingUser[]> => {
     await assertAuditor(context);
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: profiles, error } = await supabaseAdmin
+    const { data: profiles, error } = await context.supabase
       .from("profiles")
       .select("id, full_name, unit_id, requested_role, created_at")
       .eq("status", "pending")
       .order("created_at", { ascending: true });
     if (error) throw error;
 
-    const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    if (hasAdminCredentials()) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      return (profiles ?? []).map((profile) => {
+        const user = authUsers?.users.find((item) => item.id === profile.id);
+        return {
+          id: profile.id,
+          email: user?.email ?? null,
+          fullName: profile.full_name?.trim() || user?.email?.split("@")[0] || "Usuário",
+          requestedRole: profile.requested_role ?? null,
+          unitId: profile.unit_id ?? null,
+          createdAt: profile.created_at,
+        };
+      });
+    }
 
     return (profiles ?? []).map((p) => {
-      const u = authUsers?.users.find((x) => x.id === p.id);
       return {
         id: p.id,
-        email: u?.email ?? null,
-        fullName: p.full_name?.trim() || u?.email?.split("@")[0] || "Usuário",
+        email: null,
+        fullName: p.full_name?.trim() || "Usuário",
         requestedRole: p.requested_role ?? null,
         unitId: p.unit_id ?? null,
         createdAt: p.created_at,
