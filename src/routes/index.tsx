@@ -7,7 +7,6 @@ import { destinationForAccess, resolveAccessState } from "@/lib/access";
 import { friendlyError } from "@/lib/errors";
 
 export const Route = createFileRoute("/")({
-  ssr: false,
   head: () => ({
     meta: [
       { title: "Caixa Grupo Roots | Auditoria de Caixa para Barbearias" },

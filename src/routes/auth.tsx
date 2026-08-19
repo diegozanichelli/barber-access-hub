@@ -22,7 +22,6 @@ import { ROLE_LABELS, type AppRole } from "@/lib/roles";
 const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
 
 export const Route = createFileRoute("/auth")({
-  ssr: false,
   head: () => ({
     meta: [
       { title: "Entrar | Caixa Grupo Roots - Auditoria de Caixa" },

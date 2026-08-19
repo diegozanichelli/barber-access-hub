@@ -9,7 +9,6 @@ import { friendlyError } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/roles";
 
 export const Route = createFileRoute("/pendente")({
-  ssr: false,
   head: () => ({
     meta: [
       { title: "Cadastro em análise | Caixa Grupo Roots" },
