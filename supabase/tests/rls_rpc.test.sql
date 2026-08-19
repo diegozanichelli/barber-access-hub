@@ -1,7 +1,16 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET LOCAL search_path = public, extensions;
-SELECT plan(8);
+SELECT plan(10);
+
+SELECT has_function(
+  'public', 'delete_empty_open_shift', ARRAY['uuid', 'text'],
+  'atomic opening deletion RPC is installed'
+);
+SELECT has_function(
+  'public', 'master_delete_transaction', ARRAY['uuid', 'text'],
+  'atomic master transaction deletion RPC is installed'
+);
 
 -- Stable fixture IDs make auth.uid() and ownership assertions readable.
 INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, created_at, updated_at)

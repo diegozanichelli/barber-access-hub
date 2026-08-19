@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { ChevronLeft, ChevronRight, Download, Loader2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,7 +24,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import { friendlyError } from "@/lib/errors";
-import { deleteEmptyOpening } from "@/lib/financial-admin.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 import type { CashQuantities } from "@/lib/cash";
@@ -36,7 +34,6 @@ const PAGE_SIZE = 25;
 
 export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const queryClient = useQueryClient();
-  const deleteEmptyOpeningOnServer = useServerFn(deleteEmptyOpening);
   const { data: references } = useAuditorReferences();
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
@@ -135,13 +132,12 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         _shift_id: id,
         _reason: reason,
       });
-      if (!error) return;
-      if (error.code !== "PGRST202" && !error.message.includes("schema cache")) throw error;
-
-      // Lovable can publish the web bundle before PostgREST refreshes a newly
-      // created RPC. Use the authenticated server path instead of blocking the
-      // master with a schema-cache error.
-      await deleteEmptyOpeningOnServer({ data: { shiftId: id, reason } });
+      if (error?.code === "PGRST202" || error?.message.includes("schema cache")) {
+        throw new Error(
+          "Atualização do banco pendente. A exclusão foi bloqueada para não perder a auditoria. Aplique a migração 20260819110000 e tente novamente.",
+        );
+      }
+      if (error) throw error;
     },
     onSuccess: async () => {
       await Promise.all([
@@ -155,19 +151,15 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   });
   const masterDeleteTransaction = useMutation({
     mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      const { data: requestId, error: requestError } = await supabase.rpc(
-        "request_transaction_change",
-        {
-          _transaction_id: id,
-          _action: "delete",
-          _reason: reason,
-        },
-      );
-      if (requestError) throw requestError;
-      const { error } = await supabase.rpc("decide_transaction_change_request", {
-        _request_id: requestId,
-        _approve: true,
+      const { error } = await supabase.rpc("master_delete_transaction", {
+        _transaction_id: id,
+        _reason: reason,
       });
+      if (error?.code === "PGRST202" || error?.message.includes("schema cache")) {
+        throw new Error(
+          "Atualização do banco pendente. A exclusão foi bloqueada. Aplique a migração 20260819120000 e tente novamente.",
+        );
+      }
       if (error) throw error;
     },
     onSuccess: async () => {

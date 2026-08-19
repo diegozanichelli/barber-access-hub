@@ -420,6 +420,10 @@ export type Database = {
         Returns: undefined
       }
       list_transaction_change_requests: { Args: never; Returns: Json[] }
+      master_delete_transaction: {
+        Args: { _reason: string; _transaction_id: string }
+        Returns: string
+      }
       request_transaction_change: {
         Args: {
           _action: "edit" | "delete"
