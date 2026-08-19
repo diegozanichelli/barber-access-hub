@@ -25,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import { friendlyError } from "@/lib/errors";
-import { archiveEmptyOpening } from "@/lib/opening-admin.functions";
+import { archiveEmptyOpening, correctOpeningOnServer } from "@/lib/opening-admin.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 import type { CashQuantities } from "@/lib/cash";
@@ -37,6 +37,7 @@ const PAGE_SIZE = 25;
 export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const queryClient = useQueryClient();
   const archiveEmptyOpeningOnServer = useServerFn(archiveEmptyOpening);
+  const correctOpeningCompatibility = useServerFn(correctOpeningOnServer);
   const { data: references } = useAuditorReferences();
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
@@ -113,14 +114,10 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       shiftId: string;
       quantities: CashQuantities;
       reason: string;
-    }) => {
-      const { error } = await supabase.rpc("correct_opening_cash_count", {
-        _shift_id: shiftId,
-        _quantities: quantities,
-        _reason: reason,
-      });
-      if (error) throw error;
-    },
+    }) =>
+      correctOpeningCompatibility({
+        data: { shiftId, quantities, reason },
+      }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["audit-active-openings"] }),

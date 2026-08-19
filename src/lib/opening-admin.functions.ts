@@ -1,11 +1,128 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { calculateTotal, type CashQuantities } from "@/lib/cash";
+
+const quantity = z.number().int().min(0).max(1_000_000);
+const quantitiesSchema = z.object({
+  notes_200: quantity,
+  notes_100: quantity,
+  notes_50: quantity,
+  notes_20: quantity,
+  notes_10: quantity,
+  notes_5: quantity,
+  notes_2: quantity,
+  coins_1: quantity,
+  coins_050: quantity,
+  coins_025: quantity,
+  coins_010: quantity,
+  coins_005: quantity,
+});
 
 const archiveOpeningSchema = z.object({
   shiftId: z.string().uuid(),
   reason: z.string().trim().min(5).max(500),
 });
+
+const correctOpeningSchema = z.object({
+  shiftId: z.string().uuid(),
+  quantities: quantitiesSchema,
+  reason: z.string().trim().min(5).max(500),
+});
+
+async function assertMaster(context: {
+  userId: string;
+  supabase: {
+    rpc: (
+      name: "has_role",
+      args: { _user_id: string; _role: "auditor" },
+    ) => PromiseLike<{ data: boolean | null; error: Error | null }>;
+  };
+}) {
+  const { data: isMaster, error } = await context.supabase.rpc("has_role", {
+    _user_id: context.userId,
+    _role: "auditor",
+  });
+  if (error) throw error;
+  if (!isMaster) throw new Error("Somente o login master pode alterar uma abertura.");
+}
+
+/** Compatibility path for correcting an opening before the RPC is published. */
+export const correctOpeningOnServer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => correctOpeningSchema.parse(data))
+  .handler(async ({ context, data }) => {
+    await assertMaster(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: shift, error: shiftError } = await supabaseAdmin
+      .from("shifts")
+      .select("id, status, actual_opening_total")
+      .eq("id", data.shiftId)
+      .maybeSingle();
+    if (shiftError) throw shiftError;
+    if (!shift || shift.status !== "open") throw new Error("Abertura ativa não encontrada.");
+
+    const { data: count, error: countError } = await supabaseAdmin
+      .from("cash_counts")
+      .select("*")
+      .eq("shift_id", data.shiftId)
+      .eq("count_type", "opening")
+      .maybeSingle();
+    if (countError) throw countError;
+    if (!count) throw new Error("Contagem de abertura não encontrada.");
+
+    const total = calculateTotal(data.quantities as CashQuantities);
+    const previousQuantities = {
+      notes_200: count.notes_200,
+      notes_100: count.notes_100,
+      notes_50: count.notes_50,
+      notes_20: count.notes_20,
+      notes_10: count.notes_10,
+      notes_5: count.notes_5,
+      notes_2: count.notes_2,
+      coins_1: count.coins_1,
+      coins_050: count.coins_050,
+      coins_025: count.coins_025,
+      coins_010: count.coins_010,
+      coins_005: count.coins_005,
+    };
+    const auditNote = [
+      count.notes?.trim(),
+      `Correção pelo master (${context.userId}): ${data.reason}`,
+      `Valor anterior: ${count.total_calculated}; quantidades anteriores: ${JSON.stringify(previousQuantities)}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const { error: updateCountError } = await supabaseAdmin
+      .from("cash_counts")
+      .update({ ...data.quantities, total_calculated: total, notes: auditNote })
+      .eq("id", count.id);
+    if (updateCountError) throw updateCountError;
+
+    const { data: updatedShift, error: updateShiftError } = await supabaseAdmin
+      .from("shifts")
+      .update({ actual_opening_total: total })
+      .eq("id", data.shiftId)
+      .eq("status", "open")
+      .eq("actual_opening_total", shift.actual_opening_total)
+      .select("id")
+      .maybeSingle();
+    if (updateShiftError || !updatedShift) {
+      await supabaseAdmin
+        .from("cash_counts")
+        .update({
+          ...previousQuantities,
+          total_calculated: count.total_calculated,
+          notes: count.notes,
+        })
+        .eq("id", count.id);
+      if (updateShiftError) throw updateShiftError;
+      throw new Error("A abertura mudou durante a correção. Atualize e tente novamente.");
+    }
+
+    return { total, mode: "compatibility" as const };
+  });
 
 /**
  * Compatibility path for projects where the new deletion RPC has not been
@@ -16,12 +133,7 @@ export const archiveEmptyOpening = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => archiveOpeningSchema.parse(data))
   .handler(async ({ context, data }) => {
-    const { data: isMaster, error: roleError } = await context.supabase.rpc("has_role", {
-      _user_id: context.userId,
-      _role: "auditor",
-    });
-    if (roleError) throw roleError;
-    if (!isMaster) throw new Error("Somente o login master pode remover uma abertura.");
+    await assertMaster(context);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: shift, error: shiftError } = await supabaseAdmin
