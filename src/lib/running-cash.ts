@@ -28,6 +28,10 @@ export function computeRunningCash(
   let total = Number(actualOpeningTotal ?? 0);
 
   for (const t of transactions) {
+    // A reversed original and its compensating audit row have no active
+    // physical effect. This also handles non-cash income and safe-drop
+    // reversals without treating them as drawer expenses/income.
+    if (t.reversed_at || t.reverses_transaction_id) continue;
     const amount = Number(t.amount ?? 0);
     if (t.transaction_type === "income") {
       if (t.payment_method === "Dinheiro") total += amount;

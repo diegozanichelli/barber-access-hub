@@ -1,6 +1,16 @@
-import { useMemo, useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Download, Loader2, Undo2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -9,33 +19,181 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipt-thumb";
+import { BlindCalculator } from "@/components/blind-calculator";
+import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
-import { useAuditorData } from "@/hooks/use-auditor-data";
+import { friendlyError } from "@/lib/errors";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
+import type { CashQuantities } from "@/lib/cash";
 
 const ALL = "__all__";
 const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"];
+const PAGE_SIZE = 25;
 
-export function AuditFeed() {
-  const { data, isLoading } = useAuditorData();
+export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
+  const queryClient = useQueryClient();
+  const { data: references } = useAuditorReferences();
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
   const [category, setCategory] = useState(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
+  const [page, setPage] = useState(0);
+  const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
+  const [openingToCorrect, setOpeningToCorrect] = useState<{
+    id: string;
+    unitId: string;
+    total: number;
+    openedAt: string;
+  } | null>(null);
 
-  const rows = useMemo(() => {
-    const list = (data?.transactions ?? []).filter(
-      (t) =>
-        (unitId === ALL || t.unit_id === unitId) &&
-        (type === ALL || t.transaction_type === type) &&
-        (category === ALL || t.category === category),
-    );
-    return [...list].sort((a, b) =>
-      order === "desc"
-        ? b.created_at.localeCompare(a.created_at)
-        : a.created_at.localeCompare(b.created_at),
-    );
-  }, [data, unitId, type, category, order]);
+  useEffect(() => setPage(0), [unitId, type, category, order]);
+  useEffect(() => {
+    if (selectedUnitId) setUnitId(selectedUnitId);
+  }, [selectedUnitId]);
+
+  const reverseMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await supabase.rpc("reverse_transaction", {
+        _transaction_id: id,
+        _reason: reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+        queryClient.invalidateQueries({ queryKey: ["shift-transactions"] }),
+      ]);
+      toast.success("Lançamento estornado", {
+        description:
+          "O valor incorreto foi neutralizado e o histórico de auditoria foi preservado.",
+      });
+      setPendingReversal(null);
+      setReversalReason("");
+    },
+    onError: (error) =>
+      toast.error("Erro ao estornar lançamento", { description: friendlyError(error) }),
+  });
+
+  const { data: openings = [] } = useQuery({
+    queryKey: ["audit-active-openings", unitId],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      let query = supabase
+        .from("shifts")
+        .select("id, unit_id, actual_opening_total, opened_at")
+        .eq("status", "open")
+        .order("opened_at", { ascending: false });
+      if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const correctOpeningMutation = useMutation({
+    mutationFn: async ({
+      shiftId,
+      quantities,
+      reason,
+    }: {
+      shiftId: string;
+      quantities: CashQuantities;
+      reason: string;
+    }) => {
+      const { error } = await supabase.rpc("correct_opening_cash_count", {
+        _shift_id: shiftId,
+        _quantities: quantities,
+        _reason: reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-active-openings"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+        queryClient.invalidateQueries({ queryKey: ["audit-shift"] }),
+      ]);
+      toast.success("Abertura corrigida", {
+        description: "O caixa foi recalculado e a alteração ficou registrada na auditoria.",
+      });
+      setOpeningToCorrect(null);
+    },
+    onError: (error) =>
+      toast.error("Erro ao corrigir abertura", { description: friendlyError(error) }),
+  });
+  const deleteOpeningMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await supabase.rpc("delete_empty_open_shift", {
+        _shift_id: id,
+        _reason: reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-active-openings"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+      ]);
+      toast.success("Abertura excluída", { description: "A cópia de auditoria foi preservada." });
+    },
+    onError: (error) =>
+      toast.error("Erro ao excluir abertura", { description: friendlyError(error) }),
+  });
+  const masterDeleteTransaction = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { data: requestId, error: requestError } = await supabase.rpc(
+        "request_transaction_change",
+        {
+          _transaction_id: id,
+          _action: "delete",
+          _reason: reason,
+        },
+      );
+      if (requestError) throw requestError;
+      const { error } = await supabase.rpc("decide_transaction_change_request", {
+        _request_id: requestId,
+        _approve: true,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
+        queryClient.invalidateQueries({ queryKey: ["transaction-change-requests"] }),
+      ]);
+      toast.success("Lançamento excluído", {
+        description: "A cópia para auditoria foi preservada.",
+      });
+    },
+    onError: (error) =>
+      toast.error("Erro ao excluir lançamento", { description: friendlyError(error) }),
+  });
+
+  const { data: pageData, isLoading } = useQuery({
+    queryKey: ["audit-transactions", page, unitId, type, category, order],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      let query = supabase
+        .from("transactions")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: order === "asc" })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      if (type !== ALL) query = query.eq("transaction_type", type);
+      if (category !== ALL) query = query.eq("category", category as TransactionRow["category"]);
+      const { data, error, count } = await query;
+      if (error) throw error;
+      return { rows: (data ?? []) as TransactionRow[], count: count ?? 0 };
+    },
+  });
+  const rows = pageData?.rows ?? [];
+  const count = pageData?.count ?? 0;
 
   function handleExport() {
     const csv = toCSV(
@@ -53,7 +211,7 @@ export function AuditFeed() {
       ],
       rows.map((t) => [
         new Date(t.created_at).toLocaleString("pt-BR"),
-        data?.unitNames[t.unit_id] ?? "",
+        references?.unitNames[t.unit_id] ?? "",
         t.transaction_type === "income"
           ? "Entrada"
           : t.category === "Sangria"
@@ -64,14 +222,14 @@ export function AuditFeed() {
         t.payment_method ?? "",
         Number(t.amount).toFixed(2).replace(".", ","),
         t.description ?? "",
-        data?.names[t.user_id] ?? "",
+        references?.names[t.user_id] ?? "",
         t.photo_url ? "Sim" : "Não",
       ]),
     );
     downloadCSV(`lancamentos-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
-  if (isLoading || !data) {
+  if (isLoading || !references) {
     return (
       <section className="surface-panel flex justify-center p-5">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -85,7 +243,7 @@ export function AuditFeed() {
         <h2 className="text-lg">Feed de lançamentos e provas</h2>
         <Button size="sm" variant="secondary" onClick={handleExport} disabled={rows.length === 0}>
           <Download className="size-4" />
-          Exportar CSV
+          Exportar página CSV
         </Button>
       </div>
 
@@ -96,7 +254,7 @@ export function AuditFeed() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Todas as unidades</SelectItem>
-            {data.units.map((u) => (
+            {references.units.map((u) => (
               <SelectItem key={u.id} value={u.id}>
                 {u.name}
               </SelectItem>
@@ -140,6 +298,53 @@ export function AuditFeed() {
         </Select>
       </div>
 
+      {openings.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          <h3 className="text-sm font-semibold">Aberturas de caixa ativas</h3>
+          {openings.map((opening) => (
+            <div
+              key={opening.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-card p-3"
+            >
+              <div>
+                <p className="font-medium">
+                  Abertura · {references.unitNames[opening.unit_id] ?? "Unidade"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(opening.opened_at).toLocaleString("pt-BR")} · Valor contado{" "}
+                  {formatBRL(opening.actual_opening_total)}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() =>
+                  setOpeningToCorrect({
+                    id: opening.id,
+                    unitId: opening.unit_id,
+                    total: opening.actual_opening_total,
+                    openedAt: opening.opened_at,
+                  })
+                }
+              >
+                Corrigir abertura
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  const reason = window.prompt("Motivo da exclusão da abertura:");
+                  if (reason && reason.trim().length >= 5)
+                    deleteOpeningMutation.mutate({ id: opening.id, reason: reason.trim() });
+                }}
+              >
+                Excluir abertura
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {rows.length === 0 ? (
         <p className="mt-6 text-sm text-muted-foreground">Nenhum lançamento encontrado.</p>
       ) : (
@@ -147,6 +352,8 @@ export function AuditFeed() {
           {rows.map((t) => {
             const income = t.transaction_type === "income";
             const safeDrop = t.category === "Sangria";
+            const isReversal = Boolean(t.reverses_transaction_id);
+            const wasReversed = Boolean(t.reversed_at);
             return (
               <li key={t.id} className="flex items-start gap-3 py-4">
                 <ReceiptThumb
@@ -159,6 +366,11 @@ export function AuditFeed() {
                       {safeDrop ? (
                         <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
                           Sangria · Cofre
+                        </span>
+                      ) : null}
+                      {isReversal || wasReversed ? (
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {isReversal ? "Estorno" : "Estornado"}
                         </span>
                       ) : null}
                       <span className="truncate">
@@ -174,9 +386,9 @@ export function AuditFeed() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {data.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
+                    {references.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
                     {t.payment_method ?? (safeDrop ? "Transferência para o cofre" : "Despesa")} ·{" "}
-                    {data.names[t.user_id] ?? "Usuário"} ·{" "}
+                    {references.names[t.user_id] ?? "Usuário"} ·{" "}
                     {new Date(t.created_at).toLocaleString("pt-BR")}
                   </p>
                   {t.description ? (
@@ -185,12 +397,135 @@ export function AuditFeed() {
                   {!t.photo_url && !safeDrop ? (
                     <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
                   ) : null}
+                  {!isReversal && !wasReversed ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => setPendingReversal(t)}>
+                        <Undo2 className="size-4" /> Estornar erro
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          const reason = window.prompt("Motivo da exclusão definitiva:");
+                          if (reason && reason.trim().length >= 5)
+                            masterDeleteTransaction.mutate({ id: t.id, reason: reason.trim() });
+                        }}
+                      >
+                        Excluir definitivamente
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </li>
             );
           })}
         </ul>
       )}
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+        <p className="text-xs text-muted-foreground">
+          {count === 0
+            ? "0 resultados"
+            : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, count)} de ${count}`}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            <ChevronLeft className="size-4" /> Anterior
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={(page + 1) * PAGE_SIZE >= count}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Próxima <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
+
+      <Dialog
+        open={Boolean(pendingReversal)}
+        onOpenChange={(open) => {
+          if (!open && !reverseMutation.isPending) {
+            setPendingReversal(null);
+            setReversalReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Estornar lançamento incorreto?</DialogTitle>
+            <DialogDescription>
+              O registro não será apagado: um estorno compensatório será criado para corrigir o
+              caixa sem perder o histórico da auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingReversal ? (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
+              <p className="font-medium">
+                {pendingReversal.category} · {formatBRL(pendingReversal.amount)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {references.unitNames[pendingReversal.unit_id] ?? "Unidade"} ·{" "}
+                {new Date(pendingReversal.created_at).toLocaleString("pt-BR")}
+              </p>
+            </div>
+          ) : null}
+          <Textarea
+            value={reversalReason}
+            onChange={(event) => setReversalReason(event.target.value)}
+            placeholder="Informe o motivo da correção"
+            aria-label="Motivo do estorno"
+            disabled={reverseMutation.isPending}
+          />
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setPendingReversal(null)}
+              disabled={reverseMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={reversalReason.trim().length < 5 || reverseMutation.isPending}
+              onClick={() => {
+                if (!pendingReversal) return;
+                reverseMutation.mutate({ id: pendingReversal.id, reason: reversalReason.trim() });
+              }}
+            >
+              {reverseMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Confirmar estorno
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <BlindCalculator
+        open={Boolean(openingToCorrect)}
+        onOpenChange={(open) => !open && setOpeningToCorrect(null)}
+        title="Corrigir contagem de abertura"
+        description={`Refaça a contagem física. O valor atual é ${formatBRL(openingToCorrect?.total ?? 0)}. Informe o motivo no campo de observações.`}
+        submitLabel="Salvar correção"
+        submitting={correctOpeningMutation.isPending}
+        onSubmit={({ quantities, notes }) => {
+          if (!openingToCorrect) return;
+          if (notes.trim().length < 5) {
+            toast.error("Informe o motivo da correção", {
+              description: "Use pelo menos 5 caracteres no campo de observações.",
+            });
+            return;
+          }
+          correctOpeningMutation.mutate({
+            shiftId: openingToCorrect.id,
+            quantities,
+            reason: notes.trim(),
+          });
+        }}
+      />
     </section>
   );
 }
