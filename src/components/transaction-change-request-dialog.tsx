@@ -31,6 +31,19 @@ export function TransactionChangeRequestDialog({
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [reason, setReason] = useState("");
+
+  function resetForm() {
+    setAction("delete");
+    setAmount("");
+    setDescription("");
+    setReason("");
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && !mutation.isPending) resetForm();
+    onOpenChange(nextOpen);
+  }
+
   const mutation = useMutation({
     mutationFn: async () => {
       if (!transactionId) return;
@@ -51,13 +64,14 @@ export function TransactionChangeRequestDialog({
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["transaction-change-requests"] });
       toast.success("Solicitação enviada ao login master");
+      resetForm();
       onOpenChange(false);
     },
     onError: (error) =>
       toast.error("Erro ao solicitar alteração", { description: friendlyError(error) }),
   });
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Solicitar alteração</DialogTitle>

@@ -42,6 +42,12 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [page, setPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
   const [reversalReason, setReversalReason] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: "opening"; id: string; label: string; amount: number; createdAt: string }
+    | { kind: "transaction"; id: string; label: string; amount: number; createdAt: string }
+    | null
+  >(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const [openingToCorrect, setOpeningToCorrect] = useState<{
     id: string;
     unitId: string;
@@ -145,6 +151,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
       ]);
       toast.success("Abertura excluída", { description: "A cópia de auditoria foi preservada." });
+      setDeleteTarget(null);
+      setDeleteReason("");
     },
     onError: (error) =>
       toast.error("Erro ao excluir abertura", { description: friendlyError(error) }),
@@ -171,6 +179,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       toast.success("Lançamento excluído", {
         description: "A cópia para auditoria foi preservada.",
       });
+      setDeleteTarget(null);
+      setDeleteReason("");
     },
     onError: (error) =>
       toast.error("Erro ao excluir lançamento", { description: friendlyError(error) }),
@@ -333,11 +343,15 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={() => {
-                  const reason = window.prompt("Motivo da exclusão da abertura:");
-                  if (reason && reason.trim().length >= 5)
-                    deleteOpeningMutation.mutate({ id: opening.id, reason: reason.trim() });
-                }}
+                onClick={() =>
+                  setDeleteTarget({
+                    kind: "opening",
+                    id: opening.id,
+                    label: `Abertura · ${references.unitNames[opening.unit_id] ?? "Unidade"}`,
+                    amount: opening.actual_opening_total,
+                    createdAt: opening.opened_at,
+                  })
+                }
               >
                 Excluir abertura
               </Button>
@@ -406,11 +420,15 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => {
-                          const reason = window.prompt("Motivo da exclusão definitiva:");
-                          if (reason && reason.trim().length >= 5)
-                            masterDeleteTransaction.mutate({ id: t.id, reason: reason.trim() });
-                        }}
+                        onClick={() =>
+                          setDeleteTarget({
+                            kind: "transaction",
+                            id: t.id,
+                            label: `${t.category}${t.client_name ? ` · ${t.client_name}` : ""}`,
+                            amount: t.amount,
+                            createdAt: t.created_at,
+                          })
+                        }
                       >
                         Excluir definitivamente
                       </Button>
@@ -501,6 +519,76 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
             >
               {reverseMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
               Confirmar estorno
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !deleteOpeningMutation.isPending && !masterDeleteTransaction.isPending) {
+            setDeleteTarget(null);
+            setDeleteReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar exclusão definitiva?</DialogTitle>
+            <DialogDescription>
+              Esta ação remove o registro operacional. Uma cópia completa permanecerá na auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteTarget ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              <p className="font-semibold">{deleteTarget.label}</p>
+              <p className="text-muted-foreground">
+                {formatBRL(deleteTarget.amount)} ·{" "}
+                {new Date(deleteTarget.createdAt).toLocaleString("pt-BR")}
+              </p>
+            </div>
+          ) : null}
+          <Textarea
+            value={deleteReason}
+            onChange={(event) => setDeleteReason(event.target.value)}
+            placeholder="Informe o motivo da exclusão"
+            aria-label="Motivo da exclusão definitiva"
+            disabled={deleteOpeningMutation.isPending || masterDeleteTransaction.isPending}
+          />
+          {deleteReason.length > 0 && deleteReason.trim().length < 5 ? (
+            <p className="text-xs font-semibold text-destructive">
+              Informe pelo menos 5 caracteres.
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteReason("");
+              }}
+              disabled={deleteOpeningMutation.isPending || masterDeleteTransaction.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                deleteReason.trim().length < 5 ||
+                deleteOpeningMutation.isPending ||
+                masterDeleteTransaction.isPending
+              }
+              onClick={() => {
+                if (!deleteTarget) return;
+                const payload = { id: deleteTarget.id, reason: deleteReason.trim() };
+                if (deleteTarget.kind === "opening") deleteOpeningMutation.mutate(payload);
+                else masterDeleteTransaction.mutate(payload);
+              }}
+            >
+              {deleteOpeningMutation.isPending || masterDeleteTransaction.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              Excluir definitivamente
             </Button>
           </DialogFooter>
         </DialogContent>
