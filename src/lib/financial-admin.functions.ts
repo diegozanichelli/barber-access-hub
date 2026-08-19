@@ -26,7 +26,7 @@ export const deleteEmptyOpening = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: shift, error: shiftError } = await supabaseAdmin
       .from("shifts")
-      .select("id, status")
+      .select("*")
       .eq("id", data.shiftId)
       .maybeSingle();
     if (shiftError) throw shiftError;
@@ -48,6 +48,28 @@ export const deleteEmptyOpening = createServerFn({ method: "POST" })
     if ((transactions ?? 0) > 0 || (withdrawals ?? 0) > 0) {
       throw new Error(
         "Este turno possui movimentações. Corrija os lançamentos antes de excluir a abertura.",
+      );
+    }
+
+    const { data: counts, error: countsError } = await supabaseAdmin
+      .from("cash_counts")
+      .select("*")
+      .eq("shift_id", data.shiftId)
+      .order("created_at");
+    if (countsError) throw countsError;
+
+    // Never delete without first persisting the same audit snapshot produced
+    // by the PostgreSQL RPC. If this table is not available, the insert fails
+    // and the shift remains untouched.
+    const { error: auditError } = await supabaseAdmin.from("cancelled_openings").insert({
+      shift_snapshot: shift,
+      counts_snapshot: counts ?? [],
+      cancelled_by: context.userId,
+      reason: data.reason,
+    });
+    if (auditError) {
+      throw new Error(
+        `Não foi possível preservar a auditoria; nada foi excluído. ${auditError.message}`,
       );
     }
 

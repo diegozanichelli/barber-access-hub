@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      cancelled_openings: {
+        Row: {
+          cancelled_by: string
+          counts_snapshot: Json
+          created_at: string
+          id: string
+          reason: string
+          shift_snapshot: Json
+        }
+        Insert: {
+          cancelled_by: string
+          counts_snapshot: Json
+          created_at?: string
+          id?: string
+          reason: string
+          shift_snapshot: Json
+        }
+        Update: {
+          cancelled_by?: string
+          counts_snapshot?: Json
+          created_at?: string
+          id?: string
+          reason?: string
+          shift_snapshot?: Json
+        }
+        Relationships: []
+      }
       cash_counts: {
         Row: {
           coins_005: number
