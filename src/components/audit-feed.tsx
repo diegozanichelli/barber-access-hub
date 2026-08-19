@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { ChevronLeft, ChevronRight, Download, Loader2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import { friendlyError } from "@/lib/errors";
+import { archiveEmptyOpening } from "@/lib/opening-admin.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 import type { CashQuantities } from "@/lib/cash";
@@ -34,6 +36,7 @@ const PAGE_SIZE = 25;
 
 export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const queryClient = useQueryClient();
+  const archiveEmptyOpeningOnServer = useServerFn(archiveEmptyOpening);
   const { data: references } = useAuditorReferences();
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
@@ -139,18 +142,22 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         _reason: reason,
       });
       if (error?.code === "PGRST202" || error?.message.includes("schema cache")) {
-        throw new Error(
-          "Atualização do banco pendente. A exclusão foi bloqueada para não perder a auditoria. Aplique a migração 20260819110000 e tente novamente.",
-        );
+        return archiveEmptyOpeningOnServer({ data: { shiftId: id, reason } });
       }
       if (error) throw error;
+      return { mode: "deleted" as const };
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["audit-active-openings"] }),
         queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
       ]);
-      toast.success("Abertura excluída", { description: "A cópia de auditoria foi preservada." });
+      toast.success("Abertura removida", {
+        description:
+          result.mode === "archived"
+            ? "A RPC ainda não estava publicada; a abertura foi retirada do caixa ativo e preservada no histórico."
+            : "A cópia de auditoria foi preservada.",
+      });
       setDeleteTarget(null);
       setDeleteReason("");
     },
