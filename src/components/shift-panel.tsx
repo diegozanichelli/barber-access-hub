@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -17,12 +18,14 @@ import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
 import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
+import { TransactionChangeRequestDialog } from "@/components/transaction-change-request-dialog";
 import { WithdrawalDialog } from "@/components/withdrawal-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
-import { computeExpectedClosing, computeRunningCash, isOverLimit } from "@/lib/running-cash";
+import { openShiftOnServer } from "@/lib/cash-operations.functions";
+import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
 
@@ -41,10 +44,12 @@ const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
 
 export function ShiftPanel({ userId, unitId }: Props) {
   const queryClient = useQueryClient();
+  const openShiftCompatibility = useServerFn(openShiftOnServer);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [changeRequestId, setChangeRequestId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ label: string; total: number } | null>(null);
 
   const shiftsQuery = useQuery({
@@ -124,9 +129,14 @@ export function ShiftPanel({ userId, unitId }: Props) {
       const { error } = await supabase.rpc("open_shift", {
         _unit_id: unitId,
         _quantities: payload.quantities,
-        _total: payload.total,
         ...(payload.notes ? { _notes: payload.notes } : {}),
       });
+      if (error?.code === "PGRST202" || error?.message.includes("schema cache")) {
+        const result = await openShiftCompatibility({
+          data: { unitId, quantities: payload.quantities, notes: payload.notes },
+        });
+        return result.total;
+      }
       if (error) throw error;
       return payload.total;
     },
@@ -144,22 +154,19 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!openShift) throw new Error("Nenhum caixa aberto.");
 
-      const expectedClosing = computeExpectedClosing(
-        openShift.actual_opening_total,
-        transactions ?? [],
-      );
-
-      const { error } = await supabase.rpc("close_shift", {
+      const { data, error } = await supabase.rpc("close_shift", {
         _shift_id: openShift.id,
         _quantities: payload.quantities,
-        _total: payload.total,
-        _expected_closing: expectedClosing,
         ...(payload.notes ? { _notes: payload.notes } : {}),
       });
       if (error) throw error;
 
-      const diff = Math.round((payload.total - expectedClosing) * 100) / 100;
-      return { total: payload.total, expectedClosing, diff };
+      const result = (data ?? {}) as { total?: number; expected?: number; difference?: number };
+      return {
+        total: Number(result.total ?? payload.total),
+        expectedClosing: Number(result.expected ?? 0),
+        diff: Number(result.difference ?? 0),
+      };
     },
     onSuccess: ({ total, expectedClosing, diff }) => {
       setCalcMode(null);
@@ -189,14 +196,13 @@ export function ShiftPanel({ userId, unitId }: Props) {
       const { data, error } = await supabase.rpc("receive_handover", {
         _pending_shift_id: pendingShift.id,
         _quantities: payload.quantities,
-        _total: payload.total,
         ...(payload.notes ? { _notes: payload.notes } : {}),
       });
       if (error) throw error;
 
-      const result = (data ?? {}) as { matches?: boolean; expected?: number };
+      const result = (data ?? {}) as { matches?: boolean; expected?: number; total?: number };
       return {
-        total: payload.total,
+        total: Number(result.total ?? payload.total),
         matches: Boolean(result.matches),
         expected: Number(result.expected ?? 0),
       };
@@ -471,6 +477,15 @@ export function ShiftPanel({ userId, unitId }: Props) {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {!isReversal && !reversed ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setChangeRequestId(t.id)}
+                        >
+                          Solicitar alteração
+                        </Button>
+                      ) : null}
                       {t.photo_url ? (
                         <Button
                           size="icon"
@@ -547,6 +562,11 @@ export function ShiftPanel({ userId, unitId }: Props) {
           />
         </>
       ) : null}
+      <TransactionChangeRequestDialog
+        transactionId={changeRequestId}
+        open={Boolean(changeRequestId)}
+        onOpenChange={(open) => !open && setChangeRequestId(null)}
+      />
     </>
   );
 }
