@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ShiftPanel } from "@/components/shift-panel";
 import { useSessionProfile } from "@/hooks/use-session-profile";
+import { requireDashboardRole } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/supervisor")({
+  beforeLoad: () => requireDashboardRole("supervisor"),
   head: () => ({
     meta: [
       { title: "Painel do Supervisor | Caixa Grupo Roots" },
