@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { incomePhotoRequired, isRoundAmount, parseAmount } from "./transactions";
 
 describe("transaction rules", () => {
-  test("requires proof for subscriptions and Pix", () => {
+  test("requires proof only for Pix income", () => {
     expect(incomePhotoRequired("Bebida", "Dinheiro")).toBe(false);
     expect(incomePhotoRequired("Bebida", "Pix")).toBe(true);
-    expect(incomePhotoRequired("Renovação", "Dinheiro")).toBe(true);
+    expect(incomePhotoRequired("Renovação", "Dinheiro")).toBe(false);
+    expect(incomePhotoRequired("Assinatura Nova", "Cellcoins")).toBe(false);
   });
 
   test.each([

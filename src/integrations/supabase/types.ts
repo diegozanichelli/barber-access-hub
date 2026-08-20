@@ -559,7 +559,7 @@ export type Database = {
     Enums: {
       app_role: "atendente" | "supervisor" | "socio" | "auditor"
       approval_status: "pending" | "approved" | "rejected"
-      payment_method: "Pix" | "Crédito" | "Débito" | "Dinheiro"
+      payment_method: "Pix" | "Crédito" | "Débito" | "Dinheiro" | "Cellcoins"
       transaction_category:
         | "Bebida"
         | "Assinatura Nova"
@@ -696,7 +696,7 @@ export const Constants = {
     Enums: {
       app_role: ["atendente", "supervisor", "socio", "auditor"],
       approval_status: ["pending", "approved", "rejected"],
-      payment_method: ["Pix", "Crédito", "Débito", "Dinheiro"],
+      payment_method: ["Pix", "Crédito", "Débito", "Dinheiro", "Cellcoins"],
       transaction_category: [
         "Bebida",
         "Assinatura Nova",

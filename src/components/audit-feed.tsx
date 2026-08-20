@@ -29,6 +29,7 @@ import { archiveEmptyOpening, correctOpeningOnServer } from "@/lib/opening-admin
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 import type { CashQuantities } from "@/lib/cash";
+import { PAYMENT_METHODS } from "@/lib/transactions";
 
 const ALL = "__all__";
 const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"];
@@ -42,6 +43,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
   const [category, setCategory] = useState(ALL);
+  const [paymentMethod, setPaymentMethod] = useState(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
@@ -59,7 +61,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     openedAt: string;
   } | null>(null);
 
-  useEffect(() => setPage(0), [unitId, type, category, order]);
+  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order]);
   useEffect(() => {
     if (selectedUnitId) setUnitId(selectedUnitId);
   }, [selectedUnitId]);
@@ -191,7 +193,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   });
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-transactions", page, unitId, type, category, order],
+    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order],
     refetchInterval: 30_000,
     queryFn: async () => {
       let query = supabase
@@ -202,6 +204,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       if (unitId !== ALL) query = query.eq("unit_id", unitId);
       if (type !== ALL) query = query.eq("transaction_type", type);
       if (category !== ALL) query = query.eq("category", category as TransactionRow["category"]);
+      if (paymentMethod !== ALL) query = query.eq("payment_method", paymentMethod);
       const { data, error, count } = await query;
       if (error) throw error;
       return { rows: (data ?? []) as TransactionRow[], count: count ?? 0 };
@@ -262,7 +265,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
         <Select value={unitId} onValueChange={setUnitId}>
           <SelectTrigger aria-label="Filtrar por unidade">
             <SelectValue placeholder="Unidade" />
@@ -297,6 +300,20 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
             {CATEGORIES.map((c) => (
               <SelectItem key={c} value={c}>
                 {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+          <SelectTrigger aria-label="Filtrar por modalidade de pagamento">
+            <SelectValue placeholder="Modalidade" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Todas as modalidades</SelectItem>
+            {PAYMENT_METHODS.map((method) => (
+              <SelectItem key={method} value={method}>
+                {method}
               </SelectItem>
             ))}
           </SelectContent>
@@ -371,6 +388,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
           {rows.map((t) => {
             const income = t.transaction_type === "income";
             const safeDrop = t.category === "Sangria";
+            const receiptRequired = t.payment_method === "Pix" || !income;
             const isReversal = Boolean(t.reverses_transaction_id);
             const wasReversed = Boolean(t.reversed_at);
             return (
@@ -413,7 +431,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                   {t.description ? (
                     <p className="mt-1 text-sm text-muted-foreground">{t.description}</p>
                   ) : null}
-                  {!t.photo_url && !safeDrop ? (
+                  {!t.photo_url && receiptRequired ? (
                     <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
                   ) : null}
                   {!isReversal && !wasReversed ? (
