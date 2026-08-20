@@ -8,6 +8,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type CashCountRow, type ShiftRow } from "@/hooks/use-auditor-data";
 
 const PAGE_SIZE = 20;
+const COUNT_LABELS: Record<string, string> = {
+  opening: "Abertura",
+  closing: "Fechamento",
+  handover: "Recebimento do repasse",
+};
 
 export function ShiftHistory() {
   const { data: references } = useAuditorReferences();
@@ -231,7 +236,7 @@ export function ShiftHistory() {
             counts.map((c: CashCountRow) => (
               <div key={c.id} className="rounded-lg border border-border/60 p-4">
                 <p className="text-sm font-semibold">
-                  {c.count_type === "opening" ? "Abertura" : "Fechamento"} ·{" "}
+                  {COUNT_LABELS[c.count_type] ?? c.count_type} ·{" "}
                   {references.names[c.counted_by] ?? "Usuário"}
                 </p>
                 <p className="text-xs text-muted-foreground">

@@ -38,6 +38,10 @@ function AuditorDashboard() {
     setActiveTab("feed");
   }
 
+  function viewShiftHistory() {
+    setActiveTab("history");
+  }
+
   return (
     <DashboardShell
       eyebrow="Auditor"
@@ -61,7 +65,10 @@ function AuditorDashboard() {
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-4">
-          <AuditorOverview onViewTransactions={viewUnitTransactions} />
+          <AuditorOverview
+            onViewTransactions={viewUnitTransactions}
+            onViewShifts={viewShiftHistory}
+          />
         </TabsContent>
 
         <TabsContent value="feed">
