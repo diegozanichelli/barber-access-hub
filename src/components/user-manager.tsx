@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { KeyRound, Loader2, Users } from "lucide-react";
+import { Building2, KeyRound, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,29 @@ export function UserManager() {
       toast.error("Erro ao redefinir senha", { description: error.message }),
   });
 
+  const sortedUsers = [...(users ?? [])].sort((a, b) =>
+    a.fullName.localeCompare(b.fullName, "pt-BR"),
+  );
+  const userGroups = [
+    ...(units ?? [])
+      .map((unit) => ({
+        id: unit.id,
+        name: unit.name,
+        users: sortedUsers.filter((user) => user.unitId === unit.id),
+      }))
+      .filter((group) => group.users.length > 0),
+    {
+      id: NO_UNIT,
+      name: "Sem unidade definida",
+      users: sortedUsers.filter((user) => !user.unitId && user.role !== "auditor"),
+    },
+    {
+      id: "__network__",
+      name: "Acesso a toda a rede",
+      users: sortedUsers.filter((user) => user.role === "auditor"),
+    },
+  ].filter((group) => group.users.length > 0);
+
   return (
     <section className="surface-panel p-5">
       <div className="flex items-center gap-2">
@@ -86,143 +109,168 @@ export function UserManager() {
           <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
         </div>
       ) : (
-        <ul className="mt-4 space-y-4">
-          {(users ?? []).map((user) => {
-            const base: Draft = {
-              role: (user.role as AppRole | null) ?? "atendente",
-              unitId: user.unitId ?? NO_UNIT,
-              fullName: user.fullName,
-              email: user.email ?? "",
-            };
-            const draft = drafts[user.id] ?? base;
-            const dirty =
-              draft.role !== base.role ||
-              draft.unitId !== base.unitId ||
-              draft.fullName.trim() !== base.fullName ||
-              draft.email.trim() !== base.email;
-            const password = passwords[user.id] ?? "";
-
-            const patch = (values: Partial<Draft>) =>
-              setDrafts((p) => ({ ...p, [user.id]: { ...draft, ...values } }));
-
-            return (
-              <li key={user.id} className="space-y-3 rounded-lg border border-border/60 p-4">
-                <div className="grid gap-2">
-                  <Label htmlFor={`name-${user.id}`}>Nome completo</Label>
-                  <Input
-                    id={`name-${user.id}`}
-                    value={draft.fullName}
-                    onChange={(e) => patch({ fullName: e.target.value })}
-                  />
+        <div className="mt-5 space-y-6">
+          {userGroups.map((group) => (
+            <section key={group.id} className="overflow-hidden rounded-xl border border-border/70">
+              <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Building2 className="size-4 text-primary" aria-hidden />
+                  <h3 className="text-base font-semibold">{group.name}</h3>
                 </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor={`email-${user.id}`}>E-mail</Label>
-                  <Input
-                    id={`email-${user.id}`}
-                    type="email"
-                    inputMode="email"
-                    value={draft.email}
-                    onChange={(e) => patch({ email: e.target.value })}
-                  />
+                <div className="flex gap-2 text-xs text-muted-foreground">
+                  <span>
+                    {group.users.filter((user) => user.role === "atendente").length} atendente(s)
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span>
+                    {group.users.filter((user) => user.role === "supervisor").length} supervisor(es)
+                  </span>
                 </div>
+              </header>
+              <ul className="space-y-4 p-3 sm:p-4">
+                {group.users.map((user) => {
+                  const base: Draft = {
+                    role: (user.role as AppRole | null) ?? "atendente",
+                    unitId: user.unitId ?? NO_UNIT,
+                    fullName: user.fullName,
+                    email: user.email ?? "",
+                  };
+                  const draft = drafts[user.id] ?? base;
+                  const dirty =
+                    draft.role !== base.role ||
+                    draft.unitId !== base.unitId ||
+                    draft.fullName.trim() !== base.fullName ||
+                    draft.email.trim() !== base.email;
+                  const password = passwords[user.id] ?? "";
 
-                <div className="grid gap-2">
-                  <Label>Papel</Label>
-                  <Select
-                    value={draft.role}
-                    onValueChange={(role) =>
-                      patch({
-                        role: role as AppRole,
-                        unitId: role === "auditor" ? NO_UNIT : draft.unitId,
-                      })
-                    }
-                  >
-                    <SelectTrigger aria-label={`Papel de ${user.fullName}`}>
-                      <SelectValue placeholder="Papel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ROLE_ORDER.map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {ROLE_LABELS[r]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  const patch = (values: Partial<Draft>) =>
+                    setDrafts((p) => ({ ...p, [user.id]: { ...draft, ...values } }));
 
-                {draft.role === "auditor" ? (
-                  <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                    Acesso a todas as unidades
-                  </div>
-                ) : (
-                  <div className="grid gap-2">
-                    <Label>Unidade</Label>
-                    <Select value={draft.unitId} onValueChange={(unitId) => patch({ unitId })}>
-                      <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
-                        <SelectValue placeholder="Unidade" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_UNIT}>Sem unidade</SelectItem>
-                        {(units ?? []).map((u) => (
-                          <SelectItem key={u.id} value={u.id}>
-                            {u.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                  return (
+                    <li key={user.id} className="space-y-3 rounded-lg border border-border/60 p-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor={`name-${user.id}`}>Nome completo</Label>
+                        <Input
+                          id={`name-${user.id}`}
+                          value={draft.fullName}
+                          onChange={(e) => patch({ fullName: e.target.value })}
+                        />
+                      </div>
 
-                <Button
-                  size="sm"
-                  disabled={!dirty || mutation.isPending}
-                  onClick={() =>
-                    mutation.mutate({
-                      userId: user.id,
-                      role: draft.role,
-                      unitId: draft.unitId === NO_UNIT ? null : draft.unitId,
-                      fullName: draft.fullName.trim(),
-                      email: draft.email.trim(),
-                    })
-                  }
-                >
-                  Salvar alterações
-                </Button>
+                      <div className="grid gap-2">
+                        <Label htmlFor={`email-${user.id}`}>E-mail</Label>
+                        <Input
+                          id={`email-${user.id}`}
+                          type="email"
+                          inputMode="email"
+                          value={draft.email}
+                          onChange={(e) => patch({ email: e.target.value })}
+                        />
+                      </div>
 
-                <div className="rounded-md border border-border/60 bg-muted/20 p-3">
-                  <div className="flex items-center gap-2">
-                    <KeyRound className="size-4 text-primary" aria-hidden />
-                    <p className="text-sm font-medium">Redefinir senha</p>
-                  </div>
-                  <div className="mt-2 grid gap-2">
-                    <Input
-                      type="password"
-                      autoComplete="new-password"
-                      placeholder="Nova senha (mín. 6 caracteres)"
-                      aria-label={`Nova senha de ${user.fullName}`}
-                      value={password}
-                      onChange={(e) =>
-                        setPasswords((p) => ({ ...p, [user.id]: e.target.value }))
-                      }
-                    />
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={password.length < 6 || passwordMutation.isPending}
-                      onClick={() => {
-                        if (!window.confirm(`Definir uma nova senha para ${user.fullName}?`)) return;
-                        passwordMutation.mutate({ userId: user.id, password });
-                      }}
-                    >
-                      Definir nova senha
-                    </Button>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                      <div className="grid gap-2">
+                        <Label>Papel</Label>
+                        <Select
+                          value={draft.role}
+                          onValueChange={(role) =>
+                            patch({
+                              role: role as AppRole,
+                              unitId: role === "auditor" ? NO_UNIT : draft.unitId,
+                            })
+                          }
+                        >
+                          <SelectTrigger aria-label={`Papel de ${user.fullName}`}>
+                            <SelectValue placeholder="Papel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ROLE_ORDER.map((r) => (
+                              <SelectItem key={r} value={r}>
+                                {ROLE_LABELS[r]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {draft.role === "auditor" ? (
+                        <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                          Acesso a todas as unidades
+                        </div>
+                      ) : (
+                        <div className="grid gap-2">
+                          <Label>Unidade</Label>
+                          <Select
+                            value={draft.unitId}
+                            onValueChange={(unitId) => patch({ unitId })}
+                          >
+                            <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
+                              <SelectValue placeholder="Unidade" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NO_UNIT}>Sem unidade</SelectItem>
+                              {(units ?? []).map((u) => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  {u.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      <Button
+                        size="sm"
+                        disabled={!dirty || mutation.isPending}
+                        onClick={() =>
+                          mutation.mutate({
+                            userId: user.id,
+                            role: draft.role,
+                            unitId: draft.unitId === NO_UNIT ? null : draft.unitId,
+                            fullName: draft.fullName.trim(),
+                            email: draft.email.trim(),
+                          })
+                        }
+                      >
+                        Salvar alterações
+                      </Button>
+
+                      <div className="rounded-md border border-border/60 bg-muted/20 p-3">
+                        <div className="flex items-center gap-2">
+                          <KeyRound className="size-4 text-primary" aria-hidden />
+                          <p className="text-sm font-medium">Redefinir senha</p>
+                        </div>
+                        <div className="mt-2 grid gap-2">
+                          <Input
+                            type="password"
+                            autoComplete="new-password"
+                            placeholder="Nova senha (mín. 6 caracteres)"
+                            aria-label={`Nova senha de ${user.fullName}`}
+                            value={password}
+                            onChange={(e) =>
+                              setPasswords((p) => ({ ...p, [user.id]: e.target.value }))
+                            }
+                          />
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={password.length < 6 || passwordMutation.isPending}
+                            onClick={() => {
+                              if (!window.confirm(`Definir uma nova senha para ${user.fullName}?`))
+                                return;
+                              passwordMutation.mutate({ userId: user.id, password });
+                            }}
+                          >
+                            Definir nova senha
+                          </Button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
     </section>
   );
