@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Clock3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DENOMINATIONS, formatBRL } from "@/lib/cash";
@@ -18,14 +18,22 @@ export function ShiftHistory() {
     queryKey: ["audit-shift-history", page],
     refetchInterval: 30_000,
     queryFn: async () => {
-      const { data, error, count } = await supabase
-        .from("shifts")
-        .select("*", { count: "exact" })
-        .in("status", ["closed", "disputed"])
-        .order("opened_at", { ascending: false })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-      if (error) throw error;
-      return { rows: (data ?? []) as ShiftRow[], count: count ?? 0 };
+      const [historyResult, openCountResult] = await Promise.all([
+        supabase
+          .from("shifts")
+          .select("*", { count: "exact" })
+          .in("status", ["open", "closed", "disputed"])
+          .order("opened_at", { ascending: false })
+          .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1),
+        supabase.from("shifts").select("id", { count: "exact", head: true }).eq("status", "open"),
+      ]);
+      if (historyResult.error) throw historyResult.error;
+      if (openCountResult.error) throw openCountResult.error;
+      return {
+        rows: (historyResult.data ?? []) as ShiftRow[],
+        count: historyResult.count ?? 0,
+        openCount: openCountResult.count ?? 0,
+      };
     },
   });
 
@@ -53,19 +61,28 @@ export function ShiftHistory() {
 
   const shifts = pageData?.rows ?? [];
   const count = pageData?.count ?? 0;
+  const openCount = pageData?.openCount ?? 0;
 
   return (
     <section className="surface-panel p-5">
       <h2 className="text-lg">Histórico de turnos e divergências</h2>
+      <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+        <Clock3 className="size-4 text-primary" aria-hidden />
+        <span>
+          <strong>{openCount}</strong> {openCount === 1 ? "turno aberto" : "turnos abertos"} em toda
+          a rede. Turnos abertos, fechados e divergentes aparecem juntos abaixo.
+        </span>
+      </div>
 
       {shifts.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">Nenhum turno fechado ainda.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Nenhum turno registrado ainda.</p>
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="py-2 pr-3">Unidade</th>
+                <th className="py-2 pr-3">Situação</th>
                 <th className="py-2 pr-3">Abertura</th>
                 <th className="py-2 pr-3">Esperado (abertura)</th>
                 <th className="py-2 pr-3">Contado (abertura)</th>
@@ -101,6 +118,23 @@ export function ShiftHistory() {
                           <AlertTriangle className="size-4 text-destructive" aria-hidden />
                         ) : null}
                         {references.unitNames[s.unit_id] ?? "Unidade"}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                          s.status === "open"
+                            ? "bg-primary/15 text-primary"
+                            : s.status === "disputed"
+                              ? "bg-destructive/15 text-destructive"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {s.status === "open"
+                          ? "Aberto"
+                          : s.status === "disputed"
+                            ? "Com divergência"
+                            : "Fechado"}
                       </span>
                     </td>
                     <td className="py-3 pr-3 text-muted-foreground">
