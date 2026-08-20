@@ -7,6 +7,20 @@ export const PAYMENT_METHODS = ["Pix", "Crédito", "Débito", "Dinheiro", "Cellc
 export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+/** Compatibility marker for databases whose enum has not received Upgrade yet. */
+export const UPGRADE_DESCRIPTION_MARKER = "__upgrade__";
+
+export function displayedIncomeCategory(category: string, description: string | null): string {
+  return description === UPGRADE_DESCRIPTION_MARKER ? "Upgrade" : category;
+}
+
+export function isMissingUpgradeEnum(error: { message?: string } | null): boolean {
+  return Boolean(
+    error?.message?.includes("invalid input value for enum transaction_category") &&
+    error.message.includes("Upgrade"),
+  );
+}
+
 export const incomeSchema = z.object({
   category: z.enum(INCOME_CATEGORIES),
   clientName: z.string().trim().min(3, "Informe nome e sobrenome do cliente").max(120),

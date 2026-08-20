@@ -15,6 +15,7 @@ import {
   summarizeSalesByUnit,
   type SalesReportTransaction,
 } from "@/lib/sales-report";
+import { displayedIncomeCategory } from "@/lib/transactions";
 
 const PAGE_SIZE = 1000;
 
@@ -41,9 +42,8 @@ async function fetchSales(start: string, end: string): Promise<SalesReportTransa
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from("transactions")
-      .select("unit_id, category, amount")
+      .select("unit_id, category, amount, description")
       .eq("transaction_type", "income")
-      .in("category", [...SALES_REPORT_CATEGORIES])
       .gte("created_at", `${start}T00:00:00-03:00`)
       .lte("created_at", `${end}T23:59:59.999-03:00`)
       .is("reversed_at", null)
@@ -51,8 +51,23 @@ async function fetchSales(start: string, end: string): Promise<SalesReportTransa
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw error;
-    const page = (data ?? []) as SalesReportTransaction[];
-    rows.push(...page);
+    const page = data ?? [];
+    rows.push(
+      ...page.flatMap((transaction) => {
+        const category = displayedIncomeCategory(transaction.category, transaction.description);
+        return SALES_REPORT_CATEGORIES.includes(
+          category as (typeof SALES_REPORT_CATEGORIES)[number],
+        )
+          ? [
+              {
+                unit_id: transaction.unit_id,
+                category: category as SalesReportTransaction["category"],
+                amount: transaction.amount,
+              },
+            ]
+          : [];
+      }),
+    );
     if (page.length < PAGE_SIZE) break;
   }
 

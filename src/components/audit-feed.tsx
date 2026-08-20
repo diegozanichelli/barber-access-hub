@@ -29,7 +29,11 @@ import { archiveEmptyOpening, correctOpeningOnServer } from "@/lib/opening-admin
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 import type { CashQuantities } from "@/lib/cash";
-import { PAYMENT_METHODS } from "@/lib/transactions";
+import {
+  displayedIncomeCategory,
+  PAYMENT_METHODS,
+  UPGRADE_DESCRIPTION_MARKER,
+} from "@/lib/transactions";
 
 const ALL = "__all__";
 const CATEGORIES = [
@@ -212,7 +216,15 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
       if (unitId !== ALL) query = query.eq("unit_id", unitId);
       if (type !== ALL) query = query.eq("transaction_type", type);
-      if (category !== ALL) query = query.eq("category", category);
+      if (category === "Upgrade") {
+        query = query.eq("description", UPGRADE_DESCRIPTION_MARKER);
+      } else if (category === "Renovação") {
+        query = query
+          .eq("category", category)
+          .or(`description.is.null,description.neq.${UPGRADE_DESCRIPTION_MARKER}`);
+      } else if (category !== ALL) {
+        query = query.eq("category", category);
+      }
       if (paymentMethod !== ALL) query = query.eq("payment_method", paymentMethod);
       const { data, error, count } = await query;
       if (error) throw error;
@@ -244,11 +256,11 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
           : t.category === "Sangria"
             ? "Sangria (cofre)"
             : "Despesa",
-        t.category,
+        displayedIncomeCategory(t.category, t.description),
         t.client_name ?? "",
         t.payment_method ?? "",
         Number(t.amount).toFixed(2).replace(".", ","),
-        t.description ?? "",
+        t.description === UPGRADE_DESCRIPTION_MARKER ? "" : (t.description ?? ""),
         references?.names[t.user_id] ?? "",
         t.photo_url ? "Sim" : "Não",
       ]),
@@ -398,6 +410,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       ) : (
         <ul className="mt-4 divide-y divide-border/60">
           {rows.map((t) => {
+            const displayedCategory = displayedIncomeCategory(t.category, t.description);
             const income = t.transaction_type === "income";
             const safeDrop = t.category === "Sangria";
             const receiptRequired = t.payment_method === "Pix" || !income;
@@ -407,7 +420,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
               <li key={t.id} className="flex items-start gap-3 py-4">
                 <ReceiptThumb
                   path={t.photo_url}
-                  alt={`Comprovante · ${t.category} · ${formatBRL(t.amount)}`}
+                  alt={`Comprovante · ${displayedCategory} · ${formatBRL(t.amount)}`}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
@@ -423,7 +436,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                         </span>
                       ) : null}
                       <span className="truncate">
-                        {t.category}
+                        {displayedCategory}
                         {t.client_name ? ` · ${t.client_name}` : ""}
                       </span>
                     </p>
@@ -440,7 +453,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                     {references.names[t.user_id] ?? "Usuário"} ·{" "}
                     {new Date(t.created_at).toLocaleString("pt-BR")}
                   </p>
-                  {t.description ? (
+                  {t.description && t.description !== UPGRADE_DESCRIPTION_MARKER ? (
                     <p className="mt-1 text-sm text-muted-foreground">{t.description}</p>
                   ) : null}
                   {!t.photo_url && receiptRequired ? (
@@ -458,7 +471,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                           setDeleteTarget({
                             kind: "transaction",
                             id: t.id,
-                            label: `${t.category}${t.client_name ? ` · ${t.client_name}` : ""}`,
+                            label: `${displayedCategory}${t.client_name ? ` · ${t.client_name}` : ""}`,
                             amount: t.amount,
                             createdAt: t.created_at,
                           })

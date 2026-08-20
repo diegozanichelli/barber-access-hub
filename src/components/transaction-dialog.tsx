@@ -29,10 +29,12 @@ import {
   PAYMENT_METHODS,
   expenseSchema,
   incomeSchema,
+  isMissingUpgradeEnum,
   isRoundAmount,
   parseAmount,
   safeDropSchema,
   uploadReceipt,
+  UPGRADE_DESCRIPTION_MARKER,
   type IncomeCategory,
   type PaymentMethod,
 } from "@/lib/transactions";
@@ -119,20 +121,31 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         }
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
-        const { error: insertError } = await supabase.from("transactions").insert(
-          parsedRows.map((r) => ({
-            shift_id: shiftId,
-            unit_id: unitId,
-            user_id: userId,
-            transaction_type: "income",
-            category: r.category,
-            client_name: r.clientName,
-            payment_method: r.paymentMethod,
-            amount: r.amount,
-            photo_url: photoPath,
-          })),
-        );
-        if (insertError) throw insertError;
+        const transactionRows = parsedRows.map((r) => ({
+          shift_id: shiftId,
+          unit_id: unitId,
+          user_id: userId,
+          transaction_type: "income",
+          category: r.category,
+          description: r.category === "Upgrade" ? UPGRADE_DESCRIPTION_MARKER : null,
+          client_name: r.clientName,
+          payment_method: r.paymentMethod,
+          amount: r.amount,
+          photo_url: photoPath,
+        }));
+        const { error: insertError } = await supabase.from("transactions").insert(transactionRows);
+        if (insertError && category === "Upgrade" && isMissingUpgradeEnum(insertError)) {
+          const { error: fallbackError } = await supabase.from("transactions").insert(
+            transactionRows.map((row) => ({
+              ...row,
+              category: "Renovação" as const,
+              description: UPGRADE_DESCRIPTION_MARKER,
+            })),
+          );
+          if (fallbackError) throw fallbackError;
+        } else if (insertError) {
+          throw insertError;
+        }
         return parsedRows.reduce((s, r) => s + r.amount, 0);
       }
 
