@@ -25,6 +25,21 @@ const openShiftSchema = z.object({
   notes: z.string().trim().max(500),
 });
 
+const closeShiftSchema = z.object({
+  shiftId: z.string().uuid(),
+  quantities: quantitiesSchema,
+  notes: z.string().trim().max(500),
+});
+
+type RpcResult = PromiseLike<{
+  data: unknown;
+  error: { code?: string; message: string } | null;
+}>;
+
+function isMissingRpc(error: { code?: string; message: string } | null) {
+  return error?.code === "PGRST202" || Boolean(error?.message.includes("schema cache"));
+}
+
 /** Compatibility path used only while the authoritative open_shift RPC is absent. */
 export const openShiftOnServer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -109,4 +124,88 @@ export const openShiftOnServer = createServerFn({ method: "POST" })
     }
 
     return { shiftId: shift.id, total, mode: "compatibility" as const };
+  });
+
+/**
+ * Closes through the authoritative RPC when available. While a connected
+ * Lovable database still exposes the legacy signature, values are recomputed
+ * on the authenticated server before calling that compatibility overload.
+ */
+export const closeShiftOnServer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => closeShiftSchema.parse(data))
+  .handler(async ({ context, data }) => {
+    const current = await context.supabase.rpc("close_shift", {
+      _shift_id: data.shiftId,
+      _quantities: data.quantities,
+      ...(data.notes ? { _notes: data.notes } : {}),
+    });
+    if (!current.error) {
+      const result = (current.data ?? {}) as {
+        total?: number;
+        expected?: number;
+        difference?: number;
+      };
+      return {
+        total: Number(result.total ?? calculateTotal(data.quantities as CashQuantities)),
+        expected: Number(result.expected ?? 0),
+        difference: Number(result.difference ?? 0),
+        mode: "current" as const,
+      };
+    }
+    if (!isMissingRpc(current.error)) throw current.error;
+
+    const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
+      await Promise.all([
+        context.supabase
+          .from("shifts")
+          .select("id, status, actual_opening_total")
+          .eq("id", data.shiftId)
+          .maybeSingle(),
+        context.supabase
+          .from("transactions")
+          .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
+          .eq("shift_id", data.shiftId),
+      ]);
+    if (shiftError) throw shiftError;
+    if (txError) throw txError;
+    if (!shift || shift.status !== "open")
+      throw new Error("Este turno já foi fechado. Atualize a tela.");
+
+    const total = calculateTotal(data.quantities as CashQuantities);
+    const expected =
+      Math.round(
+        ((transactions ?? []).reduce((running, transaction) => {
+          if (transaction.reverses_transaction_id || transaction.reversed_at) return running;
+          const amount = Number(transaction.amount);
+          if (
+            transaction.transaction_type === "income" &&
+            transaction.payment_method === "Dinheiro"
+          ) {
+            return running + amount;
+          }
+          return transaction.transaction_type === "income" ? running : running - amount;
+        }, Number(shift.actual_opening_total)) +
+          Number.EPSILON) *
+          100,
+      ) / 100;
+
+    const legacyClient = context.supabase as unknown as {
+      rpc: (name: "close_shift", args: Record<string, unknown>) => RpcResult;
+    };
+    const legacy = await legacyClient.rpc("close_shift", {
+      _shift_id: data.shiftId,
+      _quantities: data.quantities,
+      _total: total,
+      _expected_closing: expected,
+      ...(data.notes ? { _notes: data.notes } : {}),
+    });
+    if (legacy.error) throw legacy.error;
+
+    return {
+      total,
+      expected,
+      difference: Math.round((total - expected + Number.EPSILON) * 100) / 100,
+      mode: "legacy" as const,
+    };
   });

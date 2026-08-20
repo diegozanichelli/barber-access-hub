@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
-import { openShiftOnServer } from "@/lib/cash-operations.functions";
+import { closeShiftOnServer, openShiftOnServer } from "@/lib/cash-operations.functions";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
@@ -45,6 +45,7 @@ const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
 export function ShiftPanel({ userId, unitId }: Props) {
   const queryClient = useQueryClient();
   const openShiftCompatibility = useServerFn(openShiftOnServer);
+  const closeShiftCompatibility = useServerFn(closeShiftOnServer);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
@@ -154,17 +155,16 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!openShift) throw new Error("Nenhum caixa aberto.");
 
-      const { data, error } = await supabase.rpc("close_shift", {
-        _shift_id: openShift.id,
-        _quantities: payload.quantities,
-        ...(payload.notes ? { _notes: payload.notes } : {}),
+      const result = await closeShiftCompatibility({
+        data: {
+          shiftId: openShift.id,
+          quantities: payload.quantities,
+          notes: payload.notes,
+        },
       });
-      if (error) throw error;
-
-      const result = (data ?? {}) as { total?: number; expected?: number; difference?: number };
       return {
         total: Number(result.total ?? payload.total),
-        expectedClosing: Number(result.expected ?? 0),
+        expectedClosing: Number(result.expected),
         diff: Number(result.difference ?? 0),
       };
     },
