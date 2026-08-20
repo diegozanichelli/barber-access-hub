@@ -24,7 +24,11 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
-import { closeShiftOnServer, openShiftOnServer } from "@/lib/cash-operations.functions";
+import {
+  closeShiftOnServer,
+  openShiftOnServer,
+  receiveHandoverOnServer,
+} from "@/lib/cash-operations.functions";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
@@ -46,6 +50,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const queryClient = useQueryClient();
   const openShiftCompatibility = useServerFn(openShiftOnServer);
   const closeShiftCompatibility = useServerFn(closeShiftOnServer);
+  const receiveHandoverCompatibility = useServerFn(receiveHandoverOnServer);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
@@ -193,18 +198,17 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!pendingShift) throw new Error("Nenhum turno pendente de repasse.");
 
-      const { data, error } = await supabase.rpc("receive_handover", {
-        _pending_shift_id: pendingShift.id,
-        _quantities: payload.quantities,
-        ...(payload.notes ? { _notes: payload.notes } : {}),
+      const result = await receiveHandoverCompatibility({
+        data: {
+          pendingShiftId: pendingShift.id,
+          quantities: payload.quantities,
+          notes: payload.notes,
+        },
       });
-      if (error) throw error;
-
-      const result = (data ?? {}) as { matches?: boolean; expected?: number; total?: number };
       return {
         total: Number(result.total ?? payload.total),
         matches: Boolean(result.matches),
-        expected: Number(result.expected ?? 0),
+        expected: Number(result.expected),
       };
     },
     onSuccess: ({ total, matches, expected }) => {

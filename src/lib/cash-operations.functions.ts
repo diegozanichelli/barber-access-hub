@@ -31,6 +31,12 @@ const closeShiftSchema = z.object({
   notes: z.string().trim().max(500),
 });
 
+const receiveHandoverSchema = z.object({
+  pendingShiftId: z.string().uuid(),
+  quantities: quantitiesSchema,
+  notes: z.string().trim().max(500),
+});
+
 type RpcResult = PromiseLike<{
   data: unknown;
   error: { code?: string; message: string } | null;
@@ -206,6 +212,70 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
       total,
       expected,
       difference: Math.round((total - expected + Number.EPSILON) * 100) / 100,
+      mode: "legacy" as const,
+    };
+  });
+
+/** Compatibility dispatcher for current and legacy receive_handover RPCs. */
+export const receiveHandoverOnServer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => receiveHandoverSchema.parse(data))
+  .handler(async ({ context, data }) => {
+    const current = await context.supabase.rpc("receive_handover", {
+      _pending_shift_id: data.pendingShiftId,
+      _quantities: data.quantities,
+      ...(data.notes ? { _notes: data.notes } : {}),
+    });
+    if (!current.error) {
+      const result = (current.data ?? {}) as {
+        shift_id?: string;
+        matches?: boolean;
+        expected?: number;
+        total?: number;
+      };
+      return {
+        shiftId: result.shift_id,
+        total: Number(result.total ?? calculateTotal(data.quantities as CashQuantities)),
+        expected: Number(result.expected ?? 0),
+        matches: Boolean(result.matches),
+        mode: "current" as const,
+      };
+    }
+    if (!isMissingRpc(current.error)) throw current.error;
+
+    const { data: pending, error: pendingError } = await context.supabase
+      .from("shifts")
+      .select("id, status, closing_total")
+      .eq("id", data.pendingShiftId)
+      .maybeSingle();
+    if (pendingError) throw pendingError;
+    if (!pending || pending.status !== "pending_handover") {
+      throw new Error("Este repasse já foi recebido. Atualize a tela.");
+    }
+
+    const total = calculateTotal(data.quantities as CashQuantities);
+    const expected = Number(pending.closing_total ?? 0);
+    const legacyClient = context.supabase as unknown as {
+      rpc: (name: "receive_handover", args: Record<string, unknown>) => RpcResult;
+    };
+    const legacy = await legacyClient.rpc("receive_handover", {
+      _pending_shift_id: data.pendingShiftId,
+      _quantities: data.quantities,
+      _total: total,
+      ...(data.notes ? { _notes: data.notes } : {}),
+    });
+    if (legacy.error) throw legacy.error;
+    const result = (legacy.data ?? {}) as {
+      shift_id?: string;
+      matches?: boolean;
+      expected?: number;
+    };
+
+    return {
+      shiftId: result.shift_id,
+      total,
+      expected: Number(result.expected ?? expected),
+      matches: result.matches ?? Math.abs(expected - total) < 0.005,
       mode: "legacy" as const,
     };
   });
