@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      cancelled_openings: {
+        Row: {
+          cancelled_by: string
+          counts_snapshot: Json
+          created_at: string
+          id: string
+          reason: string
+          shift_snapshot: Json
+        }
+        Insert: {
+          cancelled_by: string
+          counts_snapshot?: Json
+          created_at?: string
+          id?: string
+          reason: string
+          shift_snapshot: Json
+        }
+        Update: {
+          cancelled_by?: string
+          counts_snapshot?: Json
+          created_at?: string
+          id?: string
+          reason?: string
+          shift_snapshot?: Json
+        }
+        Relationships: []
+      }
       cash_counts: {
         Row: {
           coins_005: number
@@ -87,6 +114,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      deleted_transactions: {
+        Row: {
+          created_at: string
+          deleted_by: string
+          id: string
+          reason: string
+          transaction_snapshot: Json
+        }
+        Insert: {
+          created_at?: string
+          deleted_by: string
+          id?: string
+          reason: string
+          transaction_snapshot: Json
+        }
+        Update: {
+          created_at?: string
+          deleted_by?: string
+          id?: string
+          reason?: string
+          transaction_snapshot?: Json
+        }
+        Relationships: []
       }
       partner_withdrawals: {
         Row: {
@@ -260,6 +311,62 @@ export type Database = {
           },
         ]
       }
+      transaction_change_requests: {
+        Row: {
+          action: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: string
+          proposed_amount: number | null
+          proposed_description: string | null
+          reason: string
+          requested_by: string
+          status: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason: string
+          requested_by: string
+          status?: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason?: string
+          requested_by?: string
+          status?: string
+          transaction_id?: string
+          transaction_snapshot?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_change_requests_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -380,15 +487,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cash_total: { Args: { _q: Json }; Returns: number }
       close_shift: {
-        Args: {
-          _expected_closing: number
-          _notes?: string
-          _quantities: Json
-          _shift_id: string
-          _total: number
-        }
-        Returns: undefined
+        Args: { _notes?: string; _quantities: Json; _shift_id: string }
+        Returns: Json
       }
       create_partner_withdrawal: {
         Args: {
@@ -400,6 +502,14 @@ export type Database = {
         Returns: string
       }
       current_unit_id: { Args: never; Returns: string }
+      decide_transaction_change_request: {
+        Args: { _approve: boolean; _request_id: string }
+        Returns: undefined
+      }
+      delete_empty_open_shift: {
+        Args: { _reason: string; _shift_id: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -416,23 +526,51 @@ export type Database = {
           unit_id: string
         }[]
       }
-      open_shift: {
-        Args: {
-          _notes?: string
-          _quantities: Json
-          _total: number
-          _unit_id: string
+      list_transaction_change_requests: {
+        Args: never
+        Returns: {
+          action: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: string
+          proposed_amount: number | null
+          proposed_description: string | null
+          reason: string
+          requested_by: string
+          status: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "transaction_change_requests"
+          isOneToOne: false
+          isSetofReturn: true
         }
+      }
+      master_delete_transaction: {
+        Args: { _reason: string; _transaction_id: string }
+        Returns: undefined
+      }
+      open_shift: {
+        Args: { _notes?: string; _quantities: Json; _unit_id: string }
         Returns: string
       }
       receive_handover: {
-        Args: {
-          _notes?: string
-          _pending_shift_id: string
-          _quantities: Json
-          _total: number
-        }
+        Args: { _notes?: string; _pending_shift_id: string; _quantities: Json }
         Returns: Json
+      }
+      request_transaction_change: {
+        Args: {
+          _action: string
+          _proposed_amount?: number
+          _proposed_description?: string
+          _reason: string
+          _transaction_id: string
+        }
+        Returns: string
       }
       resolve_shift_dispute: {
         Args: { _note: string; _shift_id: string }
@@ -442,10 +580,15 @@ export type Database = {
         Args: { _note: string; _withdrawal_id: string }
         Returns: undefined
       }
+      respond_partner_withdrawal: {
+        Args: { _decision: string; _withdrawal_id: string }
+        Returns: Database["public"]["Enums"]["withdrawal_status"]
+      }
       reverse_transaction: {
         Args: { _reason: string; _transaction_id: string }
         Returns: string
       }
+      shift_expected_cash: { Args: { _shift_id: string }; Returns: number }
       unit_safe_balance: { Args: { _unit_id: string }; Returns: number }
     }
     Enums: {
