@@ -1,15 +1,57 @@
 import { useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, ChevronLeft, ChevronRight, Clock3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DENOMINATIONS, formatBRL } from "@/lib/cash";
-import { useAuditorData, type CashCountRow, type ShiftRow } from "@/hooks/use-auditor-data";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuditorReferences, type CashCountRow, type ShiftRow } from "@/hooks/use-auditor-data";
+
+const PAGE_SIZE = 20;
 
 export function ShiftHistory() {
-  const { data, isLoading } = useAuditorData();
+  const { data: references } = useAuditorReferences();
   const [detail, setDetail] = useState<ShiftRow | null>(null);
+  const [page, setPage] = useState(0);
 
-  if (isLoading || !data) {
+  const { data: pageData, isLoading } = useQuery({
+    queryKey: ["audit-shift-history", page],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const [historyResult, openCountResult] = await Promise.all([
+        supabase
+          .from("shifts")
+          .select("*", { count: "exact" })
+          .in("status", ["open", "closed", "disputed"])
+          .order("opened_at", { ascending: false })
+          .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1),
+        supabase.from("shifts").select("id", { count: "exact", head: true }).eq("status", "open"),
+      ]);
+      if (historyResult.error) throw historyResult.error;
+      if (openCountResult.error) throw openCountResult.error;
+      return {
+        rows: (historyResult.data ?? []) as ShiftRow[],
+        count: historyResult.count ?? 0,
+        openCount: openCountResult.count ?? 0,
+      };
+    },
+  });
+
+  const { data: counts = [] } = useQuery({
+    queryKey: ["audit-shift-counts", detail?.id],
+    enabled: Boolean(detail?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cash_counts")
+        .select("*")
+        .eq("shift_id", detail!.id)
+        .order("created_at");
+      if (error) throw error;
+      return (data ?? []) as CashCountRow[];
+    },
+  });
+
+  if (isLoading || !references) {
     return (
       <section className="surface-panel flex justify-center p-5">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -17,21 +59,30 @@ export function ShiftHistory() {
     );
   }
 
-  const shifts = data.shifts.filter((s) => s.status === "closed" || s.status === "disputed");
-  const counts = detail ? data.cashCounts.filter((c) => c.shift_id === detail.id) : [];
+  const shifts = pageData?.rows ?? [];
+  const count = pageData?.count ?? 0;
+  const openCount = pageData?.openCount ?? 0;
 
   return (
     <section className="surface-panel p-5">
       <h2 className="text-lg">Histórico de turnos e divergências</h2>
+      <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+        <Clock3 className="size-4 text-primary" aria-hidden />
+        <span>
+          <strong>{openCount}</strong> {openCount === 1 ? "turno aberto" : "turnos abertos"} em toda
+          a rede. Turnos abertos, fechados e divergentes aparecem juntos abaixo.
+        </span>
+      </div>
 
       {shifts.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">Nenhum turno fechado ainda.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Nenhum turno registrado ainda.</p>
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="py-2 pr-3">Unidade</th>
+                <th className="py-2 pr-3">Situação</th>
                 <th className="py-2 pr-3">Abertura</th>
                 <th className="py-2 pr-3">Esperado (abertura)</th>
                 <th className="py-2 pr-3">Contado (abertura)</th>
@@ -66,12 +117,31 @@ export function ShiftHistory() {
                         {bad ? (
                           <AlertTriangle className="size-4 text-destructive" aria-hidden />
                         ) : null}
-                        {data.unitNames[s.unit_id] ?? "Unidade"}
+                        {references.unitNames[s.unit_id] ?? "Unidade"}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                          s.status === "open"
+                            ? "bg-primary/15 text-primary"
+                            : s.status === "disputed"
+                              ? "bg-destructive/15 text-destructive"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {s.status === "open"
+                          ? "Aberto"
+                          : s.status === "disputed"
+                            ? "Com divergência"
+                            : "Fechado"}
                       </span>
                     </td>
                     <td className="py-3 pr-3 text-muted-foreground">
                       {new Date(s.opened_at).toLocaleString("pt-BR")}
-                      <span className="block text-xs">{data.names[s.opened_by] ?? "Usuário"}</span>
+                      <span className="block text-xs">
+                        {references.names[s.opened_by] ?? "Usuário"}
+                      </span>
                     </td>
                     <td className="py-3 pr-3">{formatBRL(s.expected_opening_total)}</td>
                     <td className="py-3 pr-3">{formatBRL(s.actual_opening_total)}</td>
@@ -124,10 +194,36 @@ export function ShiftHistory() {
         </div>
       )}
 
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+        <p className="text-xs text-muted-foreground">
+          {count === 0
+            ? "0 turnos"
+            : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, count)} de ${count}`}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={page === 0}
+            onClick={() => setPage((current) => current - 1)}
+          >
+            <ChevronLeft className="size-4" /> Anterior
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={(page + 1) * PAGE_SIZE >= count}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            Próxima <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
+
       <Dialog open={Boolean(detail)} onOpenChange={(o) => !o && setDetail(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogTitle>
-            Contagem detalhada · {detail ? (data.unitNames[detail.unit_id] ?? "Unidade") : ""}
+            Contagem detalhada · {detail ? (references.unitNames[detail.unit_id] ?? "Unidade") : ""}
           </DialogTitle>
           {counts.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma contagem registrada.</p>
@@ -136,7 +232,7 @@ export function ShiftHistory() {
               <div key={c.id} className="rounded-lg border border-border/60 p-4">
                 <p className="text-sm font-semibold">
                   {c.count_type === "opening" ? "Abertura" : "Fechamento"} ·{" "}
-                  {data.names[c.counted_by] ?? "Usuário"}
+                  {references.names[c.counted_by] ?? "Usuário"}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {new Date(c.created_at).toLocaleString("pt-BR")}
