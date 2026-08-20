@@ -4,6 +4,7 @@ import { AuditFeed } from "@/components/audit-feed";
 import { ChangeRequests } from "@/components/change-requests";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { ShiftHistory } from "@/components/shift-history";
+import { SalesReport } from "@/components/sales-report";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { UnitManager } from "@/components/unit-manager";
 import { UserApprovals } from "@/components/user-approvals";
@@ -45,13 +46,14 @@ function AuditorDashboard() {
       wide
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="flex h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="feed">Lançamentos</TabsTrigger>
           <TabsTrigger value="history">Turnos</TabsTrigger>
           <TabsTrigger value="units">Unidades</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
           <TabsTrigger value="requests">Solicitações</TabsTrigger>
+          <TabsTrigger value="sales">Vendas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="units">
@@ -76,6 +78,9 @@ function AuditorDashboard() {
         </TabsContent>
         <TabsContent value="requests">
           <ChangeRequests />
+        </TabsContent>
+        <TabsContent value="sales">
+          <SalesReport />
         </TabsContent>
       </Tabs>
     </DashboardShell>
