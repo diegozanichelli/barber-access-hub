@@ -40,6 +40,8 @@ type Props = {
   onSubmit: (payload: { quantities: CashQuantities; total: number; notes: string }) => void;
 };
 
+type CashGroup = "notes" | "coins";
+
 export function BlindCalculator({
   open,
   onOpenChange,
@@ -52,8 +54,22 @@ export function BlindCalculator({
   const [quantities, setQuantities] = useState<CashQuantities>({ ...EMPTY_QUANTITIES });
   const [notes, setNotes] = useState("");
   const [confirmZero, setConfirmZero] = useState(false);
+  const [activeGroup, setActiveGroup] = useState<CashGroup>("notes");
 
   const total = useMemo(() => calculateTotal(quantities), [quantities]);
+  const groupTotals = useMemo(
+    () => ({
+      notes: DENOMINATIONS.filter((item) => item.field.startsWith("notes_")).reduce(
+        (sum, item) => sum + quantities[item.field] * item.value,
+        0,
+      ),
+      coins: DENOMINATIONS.filter((item) => item.field.startsWith("coins_")).reduce(
+        (sum, item) => sum + quantities[item.field] * item.value,
+        0,
+      ),
+    }),
+    [quantities],
+  );
   const isZero = total === 0;
 
   function setField(field: keyof CashQuantities, raw: string) {
@@ -74,6 +90,7 @@ export function BlindCalculator({
     setQuantities({ ...EMPTY_QUANTITIES });
     setNotes("");
     setConfirmZero(false);
+    setActiveGroup("notes");
   }
 
   return (
@@ -100,51 +117,65 @@ export function BlindCalculator({
         </div>
 
         <div className="space-y-4">
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">Cédulas</h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {DENOMINATIONS.filter((denomination) => denomination.field.startsWith("notes_")).map(
-                (denomination) => (
-                  <DenominationField
-                    key={denomination.field}
-                    denomination={denomination}
-                    quantity={quantities[denomination.field]}
-                    onChange={(raw) => setField(denomination.field, raw)}
-                    onStep={(amount) => changeQuantity(denomination.field, amount)}
-                  />
-                ),
-              )}
-            </div>
+          <div className="grid grid-cols-2 rounded-xl bg-muted p-1" aria-label="Etapas da contagem">
+            {(["notes", "coins"] as const).map((group, index) => (
+              <Button
+                key={group}
+                type="button"
+                variant={activeGroup === group ? "default" : "ghost"}
+                className="h-auto min-h-12 flex-col gap-0.5 py-2"
+                aria-current={activeGroup === group ? "step" : undefined}
+                onClick={() => setActiveGroup(group)}
+              >
+                <span className="text-xs font-normal opacity-80">Etapa {index + 1} de 2</span>
+                <span>{group === "notes" ? "Cédulas" : "Moedas"}</span>
+                <span className="text-xs font-normal">{formatBRL(groupTotals[group])}</span>
+              </Button>
+            ))}
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Moedas</h3>
+            <div className="mb-2 flex items-end justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  {activeGroup === "notes" ? "Conte as cédulas" : "Conte as moedas"}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Digite a quantidade ou use os botões de menos e mais.
+                </p>
+              </div>
+              <span className="shrink-0 text-sm font-semibold text-primary">
+                {formatBRL(groupTotals[activeGroup])}
+              </span>
+            </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              {DENOMINATIONS.filter((denomination) => denomination.field.startsWith("coins_")).map(
-                (denomination) => (
-                  <DenominationField
-                    key={denomination.field}
-                    denomination={denomination}
-                    quantity={quantities[denomination.field]}
-                    onChange={(raw) => setField(denomination.field, raw)}
-                    onStep={(amount) => changeQuantity(denomination.field, amount)}
-                  />
-                ),
-              )}
+              {DENOMINATIONS.filter((denomination) =>
+                denomination.field.startsWith(activeGroup === "notes" ? "notes_" : "coins_"),
+              ).map((denomination) => (
+                <DenominationField
+                  key={denomination.field}
+                  denomination={denomination}
+                  quantity={quantities[denomination.field]}
+                  onChange={(raw) => setField(denomination.field, raw)}
+                  onStep={(amount) => changeQuantity(denomination.field, amount)}
+                />
+              ))}
             </div>
           </div>
 
-          <div className="space-y-2 pt-2">
-            <Label htmlFor="cash-notes" className="text-sm font-normal">
-              Observações (opcional)
-            </Label>
-            <Textarea
-              id="cash-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-            />
-          </div>
+          {activeGroup === "coins" ? (
+            <div className="space-y-2 pt-2">
+              <Label htmlFor="cash-notes" className="text-sm font-normal">
+                Observações (opcional)
+              </Label>
+              <Textarea
+                id="cash-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+          ) : null}
 
           {isZero && confirmZero ? (
             <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
@@ -154,11 +185,15 @@ export function BlindCalculator({
           ) : null}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="sticky -bottom-6 z-10 -mx-6 border-t border-border bg-background/95 px-6 pb-1 pt-3 backdrop-blur">
           <Button
-            className="w-full"
+            className="min-h-12 w-full"
             disabled={submitting}
             onClick={() => {
+              if (activeGroup === "notes") {
+                setActiveGroup("coins");
+                return;
+              }
               if (isZero && !confirmZero) {
                 setConfirmZero(true);
                 return;
@@ -167,7 +202,11 @@ export function BlindCalculator({
             }}
           >
             {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
-            {isZero && confirmZero ? "Confirmar caixa vazio (R$ 0,00)" : submitLabel}
+            {activeGroup === "notes"
+              ? "Continuar para moedas"
+              : isZero && confirmZero
+                ? "Confirmar caixa vazio (R$ 0,00)"
+                : submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -217,11 +256,12 @@ function DenominationField({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-[2.5rem_1fr_2.5rem] gap-2">
+      <div className="mt-3 grid grid-cols-[2.75rem_1fr_2.75rem] gap-2">
         <Button
           type="button"
           variant="secondary"
           size="icon"
+          className="size-11"
           aria-label={`Diminuir ${denomination.label.toLowerCase()}`}
           disabled={quantity === 0}
           onClick={() => onStep(-1)}
@@ -231,7 +271,7 @@ function DenominationField({
         <Input
           id={denomination.field}
           inputMode="numeric"
-          className="h-10 text-center text-base font-semibold"
+          className="h-11 text-center text-base font-semibold"
           value={quantity === 0 ? "" : String(quantity)}
           placeholder="0"
           aria-label={`Quantidade de ${denomination.label.toLowerCase()}`}
@@ -241,6 +281,7 @@ function DenominationField({
           type="button"
           variant="secondary"
           size="icon"
+          className="size-11"
           aria-label={`Adicionar ${denomination.label.toLowerCase()}`}
           onClick={() => onStep(1)}
         >
