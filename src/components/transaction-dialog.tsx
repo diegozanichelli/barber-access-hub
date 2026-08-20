@@ -74,8 +74,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   );
   const hasCash = payments.some((p) => p.method === "Dinheiro");
   const hasPix = payments.some((p) => p.method === "Pix");
-  const isSubscription = category === "Assinatura Nova" || category === "Renovação";
-  const photoRequired = isIncome ? isSubscription || hasPix : isExpense;
+  const photoRequired = isIncome ? hasPix : true;
 
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
@@ -116,9 +115,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         });
 
         if (photoRequired && !file) {
-          throw new Error(
-            "Foto obrigatória para assinaturas (nova/renovação) e para pagamentos via Pix.",
-          );
+          throw new Error("O comprovante é obrigatório para pagamentos via Pix.");
         }
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
@@ -400,7 +397,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
             required={photoRequired}
             label={
               isSafeDrop
-                ? "Foto do malote (opcional)"
+                ? "Foto do comprovante da retirada"
                 : isIncome
                   ? "Foto do comprovante"
                   : "Foto da nota fiscal"
@@ -409,7 +406,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
 
           {isIncome && photoRequired ? (
             <p className="text-xs text-muted-foreground">
-              Assinaturas (nova ou renovação) e pagamentos via Pix exigem comprovante.
+              Pagamentos via Pix exigem comprovante. Nas demais modalidades a foto é opcional.
             </p>
           ) : null}
 
