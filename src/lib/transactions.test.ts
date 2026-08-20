@@ -9,7 +9,7 @@ describe("transaction rules", () => {
     expect(incomePhotoRequired("Assinatura Nova", "Cellcoins")).toBe(false);
   });
 
-  test.each([
+  test.each<[string, number]>([
     ["1.234,56", 1234.56],
     ["1234.56", 1234.56],
     ["1.500", 1500],

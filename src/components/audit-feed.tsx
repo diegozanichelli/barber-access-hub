@@ -32,8 +32,10 @@ import type { CashQuantities } from "@/lib/cash";
 import { PAYMENT_METHODS } from "@/lib/transactions";
 
 const ALL = "__all__";
-const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"];
+const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"] as const;
 const PAGE_SIZE = 25;
+type CategoryFilter = (typeof CATEGORIES)[number] | typeof ALL;
+type PaymentFilter = (typeof PAYMENT_METHODS)[number] | typeof ALL;
 
 export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const queryClient = useQueryClient();
@@ -42,8 +44,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const { data: references } = useAuditorReferences();
   const [unitId, setUnitId] = useState(ALL);
   const [type, setType] = useState(ALL);
-  const [category, setCategory] = useState(ALL);
-  const [paymentMethod, setPaymentMethod] = useState(ALL);
+  const [category, setCategory] = useState<CategoryFilter>(ALL);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentFilter>(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
@@ -203,7 +205,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
       if (unitId !== ALL) query = query.eq("unit_id", unitId);
       if (type !== ALL) query = query.eq("transaction_type", type);
-      if (category !== ALL) query = query.eq("category", category as TransactionRow["category"]);
+      if (category !== ALL) query = query.eq("category", category);
       if (paymentMethod !== ALL) query = query.eq("payment_method", paymentMethod);
       const { data, error, count } = await query;
       if (error) throw error;
@@ -291,7 +293,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
           </SelectContent>
         </Select>
 
-        <Select value={category} onValueChange={setCategory}>
+        <Select value={category} onValueChange={(value) => setCategory(value as CategoryFilter)}>
           <SelectTrigger aria-label="Filtrar por categoria">
             <SelectValue placeholder="Categoria" />
           </SelectTrigger>
@@ -305,7 +307,10 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
           </SelectContent>
         </Select>
 
-        <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+        <Select
+          value={paymentMethod}
+          onValueChange={(value) => setPaymentMethod(value as PaymentFilter)}
+        >
           <SelectTrigger aria-label="Filtrar por modalidade de pagamento">
             <SelectValue placeholder="Modalidade" />
           </SelectTrigger>

@@ -10,20 +10,14 @@ import { friendlyError } from "@/lib/errors";
 import {
   listChangeRequestsOnServer,
   type ChangeRequestRecord,
+  type ChangeRequestsResult,
 } from "@/lib/change-requests.functions";
 
 export function ChangeRequests() {
   const client = useQueryClient();
   const listOnServer = useServerFn(listChangeRequestsOnServer);
   const [busyId, setBusyId] = useState<string>();
-  const {
-    data = [],
-    isLoading,
-    isError,
-    error,
-    isFetching,
-    refetch,
-  } = useQuery({
+  const { data, isLoading, isError, error, isFetching, refetch } = useQuery<ChangeRequestsResult>({
     queryKey: ["transaction-change-requests"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("list_transaction_change_requests");
@@ -93,11 +87,12 @@ export function ChangeRequests() {
         </div>
       </section>
     );
-  const requests = data.requests ?? [];
+  const result = data ?? { requests: [], available: true };
+  const requests = result.requests;
   return (
     <section className="surface-panel p-5">
       <h2 className="text-lg">Solicitações de edição e exclusão</h2>
-      {!data.available ? (
+      {!result.available ? (
         <div className="mt-3 rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm">
           <p className="font-semibold text-warning">Fluxo de solicitações aguardando publicação</p>
           <p className="mt-1 text-muted-foreground">

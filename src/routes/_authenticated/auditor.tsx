@@ -63,7 +63,7 @@ function AuditorDashboard() {
         </TabsContent>
 
         <TabsContent value="feed">
-          <AuditFeed selectedUnitId={selectedUnitId} />
+          <AuditFeed {...(selectedUnitId ? { selectedUnitId } : {})} />
         </TabsContent>
 
         <TabsContent value="history">
