@@ -1,4 +1,9 @@
-export const SALES_REPORT_CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação"] as const;
+export const SALES_REPORT_CATEGORIES = [
+  "Bebida",
+  "Assinatura Nova",
+  "Renovação",
+  "Upgrade",
+] as const;
 
 export type SalesReportCategory = (typeof SALES_REPORT_CATEGORIES)[number];
 
@@ -27,6 +32,7 @@ export function emptyUnitSalesSummary(unitId: string): UnitSalesSummary {
       Bebida: emptyMetric(),
       "Assinatura Nova": emptyMetric(),
       Renovação: emptyMetric(),
+      Upgrade: emptyMetric(),
     },
     total: emptyMetric(),
   };

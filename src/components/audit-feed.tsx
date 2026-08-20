@@ -32,7 +32,14 @@ import type { CashQuantities } from "@/lib/cash";
 import { PAYMENT_METHODS } from "@/lib/transactions";
 
 const ALL = "__all__";
-const CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Despesa", "Sangria"] as const;
+const CATEGORIES = [
+  "Bebida",
+  "Assinatura Nova",
+  "Renovação",
+  "Upgrade",
+  "Despesa",
+  "Sangria",
+] as const;
 const PAGE_SIZE = 25;
 type CategoryFilter = (typeof CATEGORIES)[number] | typeof ALL;
 type PaymentFilter = (typeof PAYMENT_METHODS)[number] | typeof ALL;

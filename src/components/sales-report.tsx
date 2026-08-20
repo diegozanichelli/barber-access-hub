@@ -89,6 +89,7 @@ export function SalesReport() {
       Bebida: { count: 0, amount: 0 },
       "Assinatura Nova": { count: 0, amount: 0 },
       Renovação: { count: 0, amount: 0 },
+      Upgrade: { count: 0, amount: 0 },
       all: { count: 0, amount: 0 },
     },
   );
@@ -102,6 +103,8 @@ export function SalesReport() {
       unit.sales.categories["Assinatura Nova"].amount.toFixed(2),
       unit.sales.categories.Renovação.count,
       unit.sales.categories.Renovação.amount.toFixed(2),
+      unit.sales.categories.Upgrade.count,
+      unit.sales.categories.Upgrade.amount.toFixed(2),
       unit.sales.total.count,
       unit.sales.total.amount.toFixed(2),
     ]);
@@ -113,6 +116,8 @@ export function SalesReport() {
       network["Assinatura Nova"].amount.toFixed(2),
       network.Renovação.count,
       network.Renovação.amount.toFixed(2),
+      network.Upgrade.count,
+      network.Upgrade.amount.toFixed(2),
       network.all.count,
       network.all.amount.toFixed(2),
     ]);
@@ -127,6 +132,8 @@ export function SalesReport() {
           "Novas assinaturas (valor)",
           "Renovações (lançamentos)",
           "Renovações (valor)",
+          "Upgrades (lançamentos)",
+          "Upgrades (valor)",
           "Total (lançamentos)",
           "Total (valor)",
         ],
@@ -147,7 +154,7 @@ export function SalesReport() {
             <h2 className="font-display text-xl uppercase">Vendas por unidade</h2>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Compare bebidas, novas assinaturas e renovações no período selecionado.
+            Compare bebidas, novas assinaturas, renovações e upgrades no período selecionado.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
@@ -195,7 +202,7 @@ export function SalesReport() {
         </div>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {SALES_REPORT_CATEGORIES.map((category) => (
               <div key={category} className="rounded-xl border bg-card p-4">
                 <p className="text-xs font-semibold uppercase text-muted-foreground">{category}</p>

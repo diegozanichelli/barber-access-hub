@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 
-export const INCOME_CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação"] as const;
+export const INCOME_CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação", "Upgrade"] as const;
 export const PAYMENT_METHODS = ["Pix", "Crédito", "Débito", "Dinheiro", "Cellcoins"] as const;
 
 export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];

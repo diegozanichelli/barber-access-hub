@@ -644,6 +644,7 @@ export type Database = {
         | "Bebida"
         | "Assinatura Nova"
         | "Renovação"
+        | "Upgrade"
         | "Despesa"
         | "Sangria"
       withdrawal_status: "pending" | "approved" | "disputed"
@@ -781,6 +782,7 @@ export const Constants = {
         "Bebida",
         "Assinatura Nova",
         "Renovação",
+        "Upgrade",
         "Despesa",
         "Sangria",
       ],
