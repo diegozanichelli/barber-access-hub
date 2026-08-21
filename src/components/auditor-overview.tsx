@@ -1,7 +1,8 @@
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatBRL } from "@/lib/cash";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
+import { differenceReason, explainShiftDivergence } from "@/lib/divergences";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -13,8 +14,10 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function AuditorOverview({
   onViewTransactions,
+  onViewShifts,
 }: {
   onViewTransactions?: (unitId: string) => void;
+  onViewShifts?: () => void;
 }) {
   const { data, isLoading } = useAuditorData();
 
@@ -34,6 +37,20 @@ export function AuditorOverview({
       null;
 
     const disputedShift = unitShifts.some((s) => s.status === "disputed");
+    const disputedRecord = unitShifts.find((s) => s.status === "disputed");
+    const handoverCount = disputedRecord
+      ? data.cashCounts.find(
+          (count) => count.shift_id === disputedRecord.id && count.count_type === "handover",
+        )
+      : null;
+    const handoverDifference =
+      disputedRecord?.closing_total !== null &&
+      disputedRecord?.closing_total !== undefined &&
+      handoverCount
+        ? Math.round(
+            (Number(handoverCount.total_calculated) - Number(disputedRecord.closing_total)) * 100,
+          ) / 100
+        : null;
     const disputedWithdrawal = data.withdrawals.some(
       (w) => w.unit_id === unit.id && w.status === "disputed",
     );
@@ -55,11 +72,36 @@ export function AuditorOverview({
       disputed: disputedShift || disputedWithdrawal,
       over: Boolean(active) && isOverLimit(running),
       openedBy: active ? (data.names[active.opened_by] ?? "Usuário") : null,
+      disputeHint:
+        handoverDifference !== null && Math.abs(handoverDifference) >= 0.01
+          ? `${handoverDifference > 0 ? "Sobra" : "Falta"} de ${formatBRL(Math.abs(handoverDifference))} no recebimento`
+          : disputedShift
+            ? "Divergência no fechamento — veja o detalhamento acima"
+            : disputedWithdrawal
+              ? "Retirada contestada"
+              : null,
     };
   });
 
   const overLimit = cards.filter((c) => c.over);
   const disputes = cards.filter((c) => c.disputed);
+  const disputedShifts = data.shifts
+    .filter((shift) => shift.status === "disputed")
+    .map((shift) => {
+      const handover = data.cashCounts.find(
+        (count) => count.shift_id === shift.id && count.count_type === "handover",
+      );
+      return {
+        shift,
+        handover,
+        explanation: explainShiftDivergence({
+          expectedClosingTotal:
+            shift.expected_closing_total === null ? null : Number(shift.expected_closing_total),
+          closingTotal: shift.closing_total === null ? null : Number(shift.closing_total),
+          handoverTotal: handover ? Number(handover.total_calculated) : null,
+        }),
+      };
+    });
 
   return (
     <>
@@ -86,26 +128,125 @@ export function AuditorOverview({
             <AlertTriangle className="size-5" aria-hidden />
             <h2 className="text-lg font-semibold">Divergências ativas</h2>
           </div>
-          <ul className="mt-3 space-y-2 text-sm">
-            {data.shifts
-              .filter((s) => s.status === "disputed")
-              .map((s) => (
-                <li key={s.id}>
-                  Repasse divergente · {data.unitNames[s.unit_id] ?? "Unidade"} · repassado{" "}
-                  {formatBRL(s.closing_total)} ·{" "}
-                  {new Date(s.closed_at ?? s.opened_at).toLocaleString("pt-BR")}
-                </li>
-              ))}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Veja abaixo em qual etapa o valor mudou: fechamento do turno ou recebimento do repasse.
+          </p>
+          <div className="mt-4 space-y-3">
+            {disputedShifts.map(({ shift, handover, explanation }) => {
+              const closingReason = differenceReason(explanation.closingDifference);
+              const handoverReason = differenceReason(explanation.handoverDifference);
+              return (
+                <article
+                  key={shift.id}
+                  className="rounded-lg border border-destructive/40 bg-background/50 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h3 className="font-semibold text-foreground">
+                        {data.unitNames[shift.unit_id] ?? "Unidade"}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Turno de {data.names[shift.opened_by] ?? "Usuário"} · fechado por{" "}
+                        {shift.closed_by ? (data.names[shift.closed_by] ?? "Usuário") : "Usuário"} ·{" "}
+                        {new Date(shift.closed_at ?? shift.opened_at).toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-destructive px-2 py-1 text-xs font-semibold text-destructive-foreground">
+                      {handoverReason !== "Sem diferença"
+                        ? `${handoverReason} no repasse`
+                        : `${closingReason} no fechamento`}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-center">
+                    <div className="rounded-md bg-muted/60 p-3">
+                      <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+                        Sistema esperava
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {explanation.expectedAtClosing === null
+                          ? "—"
+                          : formatBRL(explanation.expectedAtClosing)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Saldo calculado pelos lançamentos
+                      </p>
+                    </div>
+                    <ArrowRight
+                      className="hidden size-4 text-muted-foreground md:block"
+                      aria-hidden
+                    />
+                    <div className="rounded-md bg-muted/60 p-3">
+                      <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+                        Entregue no fechamento
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {explanation.declaredBySender === null
+                          ? "—"
+                          : formatBRL(explanation.declaredBySender)}
+                      </p>
+                      <p
+                        className={`text-xs font-semibold ${closingReason === "Sem diferença" ? "text-muted-foreground" : "text-destructive"}`}
+                      >
+                        {closingReason}
+                        {explanation.closingDifference !== null && closingReason !== "Sem diferença"
+                          ? ` de ${formatBRL(Math.abs(explanation.closingDifference))}`
+                          : ""}
+                      </p>
+                    </div>
+                    <ArrowRight
+                      className="hidden size-4 text-muted-foreground md:block"
+                      aria-hidden
+                    />
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3">
+                      <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+                        Recebido e contado
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {explanation.countedByReceiver === null
+                          ? "—"
+                          : formatBRL(explanation.countedByReceiver)}
+                      </p>
+                      <p
+                        className={`text-xs font-semibold ${handoverReason === "Sem diferença" ? "text-muted-foreground" : "text-destructive"}`}
+                      >
+                        {handoverReason}
+                        {explanation.handoverDifference !== null &&
+                        handoverReason !== "Sem diferença"
+                          ? ` de ${formatBRL(Math.abs(explanation.handoverDifference))}`
+                          : ""}
+                        {handover
+                          ? ` · por ${data.names[handover.counted_by] ?? "Usuário"}`
+                          : " · contagem não encontrada"}
+                      </p>
+                    </div>
+                  </div>
+                  {handover?.notes ? (
+                    <p className="mt-3 rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
+                      <strong>Observação do recebimento:</strong> {handover.notes}
+                    </p>
+                  ) : null}
+                </article>
+              );
+            })}
             {data.withdrawals
               .filter((w) => w.status === "disputed")
               .map((w) => (
-                <li key={w.id}>
+                <div
+                  key={w.id}
+                  className="rounded-lg border border-destructive/40 bg-background/50 p-3 text-sm"
+                >
                   Retirada contestada · {data.unitNames[w.unit_id] ?? "Unidade"} ·{" "}
                   {formatBRL(w.amount)} · {data.names[w.partner_id] ?? "Sócio"} ·{" "}
                   {new Date(w.created_at).toLocaleString("pt-BR")}
-                </li>
+                </div>
               ))}
-          </ul>
+          </div>
+          {onViewShifts ? (
+            <Button className="mt-4" variant="destructive" size="sm" onClick={onViewShifts}>
+              Ver histórico e contagens por cédula
+            </Button>
+          ) : null}
         </section>
       ) : null}
 
@@ -170,6 +311,11 @@ export function AuditorOverview({
               {c.over ? (
                 <p className="mt-1 text-xs font-semibold text-destructive">
                   Acima do limite de R$ 1.000 — solicitar sangria.
+                </p>
+              ) : null}
+              {c.disputeHint ? (
+                <p className="mt-2 rounded-md bg-destructive/10 p-2 text-xs font-semibold text-destructive">
+                  Motivo: {c.disputeHint}
                 </p>
               ) : null}
               {onViewTransactions ? (

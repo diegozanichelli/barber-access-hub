@@ -16,7 +16,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
+import { DivergenceRecountDialog } from "@/components/divergence-recount-dialog";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
+
 import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
 import { TransactionChangeRequestDialog } from "@/components/transaction-change-request-dialog";
 import { WithdrawalDialog } from "@/components/withdrawal-dialog";
@@ -24,7 +26,11 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
-import { openShiftOnServer } from "@/lib/cash-operations.functions";
+import {
+  closeShiftOnServer,
+  openShiftOnServer,
+  receiveHandoverOnServer,
+} from "@/lib/cash-operations.functions";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
@@ -35,6 +41,8 @@ type Props = {
 };
 
 type CalcMode = "opening" | "closing" | "handover" | null;
+type CountMode = Exclude<CalcMode, null>;
+type CountPayload = { quantities: CashQuantities; total: number; notes: string };
 
 const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
   pending: "Pendente",
@@ -45,12 +53,26 @@ const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
 export function ShiftPanel({ userId, unitId }: Props) {
   const queryClient = useQueryClient();
   const openShiftCompatibility = useServerFn(openShiftOnServer);
+  const closeShiftCompatibility = useServerFn(closeShiftOnServer);
+  const receiveHandoverCompatibility = useServerFn(receiveHandoverOnServer);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [changeRequestId, setChangeRequestId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ label: string; total: number } | null>(null);
+  const [checkingCount, setCheckingCount] = useState(false);
+  const [countFormVersion, setCountFormVersion] = useState(0);
+  const [attempts, setAttempts] = useState<Record<CountMode, number>>({
+    opening: 0,
+    closing: 0,
+    handover: 0,
+  });
+  const [pendingDivergence, setPendingDivergence] = useState<{
+    mode: CountMode;
+    payload: CountPayload;
+    attempts: number;
+  } | null>(null);
 
   const shiftsQuery = useQuery({
     queryKey: ["unit-shifts", unitId],
@@ -123,6 +145,11 @@ export function ShiftPanel({ userId, unitId }: Props) {
     void queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
   }
 
+  function finishCount(mode: CountMode) {
+    setPendingDivergence(null);
+    setAttempts((current) => ({ ...current, [mode]: 0 }));
+  }
+
   const openMutation = useMutation({
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!unitId) throw new Error("Você não está atribuído a uma unidade.");
@@ -141,6 +168,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
       return payload.total;
     },
     onSuccess: (total) => {
+      finishCount("opening");
       setCalcMode(null);
       setLastResult({ label: "Caixa aberto com", total });
       toast.success("Caixa aberto", { description: `Total contado: ${formatBRL(total)}` });
@@ -154,21 +182,21 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!openShift) throw new Error("Nenhum caixa aberto.");
 
-      const { data, error } = await supabase.rpc("close_shift", {
-        _shift_id: openShift.id,
-        _quantities: payload.quantities,
-        ...(payload.notes ? { _notes: payload.notes } : {}),
+      const result = await closeShiftCompatibility({
+        data: {
+          shiftId: openShift.id,
+          quantities: payload.quantities,
+          notes: payload.notes,
+        },
       });
-      if (error) throw error;
-
-      const result = (data ?? {}) as { total?: number; expected?: number; difference?: number };
       return {
         total: Number(result.total ?? payload.total),
-        expectedClosing: Number(result.expected ?? 0),
+        expectedClosing: Number(result.expected),
         diff: Number(result.difference ?? 0),
       };
     },
     onSuccess: ({ total, expectedClosing, diff }) => {
+      finishCount("closing");
       setCalcMode(null);
       setConfirmClose(false);
       setLastResult({ label: "Turno enviado para repasse com", total });
@@ -193,21 +221,21 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mutationFn: async (payload: { quantities: CashQuantities; total: number; notes: string }) => {
       if (!pendingShift) throw new Error("Nenhum turno pendente de repasse.");
 
-      const { data, error } = await supabase.rpc("receive_handover", {
-        _pending_shift_id: pendingShift.id,
-        _quantities: payload.quantities,
-        ...(payload.notes ? { _notes: payload.notes } : {}),
+      const result = await receiveHandoverCompatibility({
+        data: {
+          pendingShiftId: pendingShift.id,
+          quantities: payload.quantities,
+          notes: payload.notes,
+        },
       });
-      if (error) throw error;
-
-      const result = (data ?? {}) as { matches?: boolean; expected?: number; total?: number };
       return {
         total: Number(result.total ?? payload.total),
         matches: Boolean(result.matches),
-        expected: Number(result.expected ?? 0),
+        expected: Number(result.expected),
       };
     },
     onSuccess: ({ total, matches, expected }) => {
+      finishCount("handover");
       setCalcMode(null);
       setLastResult({ label: "Turno recebido com", total });
       if (matches) {
@@ -225,6 +253,56 @@ export function ShiftPanel({ userId, unitId }: Props) {
     onError: (error: Error) =>
       toast.error("Erro ao receber o turno", { description: friendlyError(error) }),
   });
+
+  function persistCount(mode: CountMode, payload: CountPayload) {
+    if (mode === "opening") openMutation.mutate(payload);
+    else if (mode === "closing") closeMutation.mutate(payload);
+    else handoverMutation.mutate(payload);
+  }
+
+  async function checkThenPersist(mode: CountMode, payload: CountPayload) {
+    if (!unitId) return;
+    const attempt = attempts[mode] + 1;
+    setAttempts((current) => ({ ...current, [mode]: attempt }));
+    setCheckingCount(true);
+    try {
+      const result = await checkDivergence({
+        data:
+          mode === "opening"
+            ? { mode, unitId, quantities: payload.quantities }
+            : mode === "closing" && openShift
+              ? { mode, shiftId: openShift.id, quantities: payload.quantities }
+              : mode === "handover" && pendingShift
+                ? { mode, pendingShiftId: pendingShift.id, quantities: payload.quantities }
+                : (() => {
+                    throw new Error("O turno mudou. Atualize a tela e tente novamente.");
+                  })(),
+      });
+      if (result.matches) {
+        persistCount(mode, payload);
+      } else {
+        setCalcMode(null);
+        setPendingDivergence({ mode, payload, attempts: attempt });
+      }
+    } catch (error) {
+      toast.error("Não foi possível conferir a contagem", { description: friendlyError(error) });
+    } finally {
+      setCheckingCount(false);
+    }
+  }
+
+  function confirmDivergence(reason: string) {
+    if (!pendingDivergence) return;
+    const { mode, payload, attempts: attemptCount } = pendingDivergence;
+    const auditNote = [
+      `DIVERGÊNCIA CONFIRMADA APÓS ${attemptCount} TENTATIVA(S). Justificativa: ${reason}`,
+      payload.notes.trim() ? `Observação da contagem: ${payload.notes.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join(" | ")
+      .slice(0, 500);
+    persistCount(mode, { ...payload, notes: auditNote });
+  }
 
   async function openReceipt(path: string) {
     const url = await getReceiptUrl(path);
@@ -516,33 +594,53 @@ export function ShiftPanel({ userId, unitId }: Props) {
       ) : null}
 
       <BlindCalculator
+        key={`opening-${countFormVersion}`}
         open={calcMode === "opening"}
         onOpenChange={(o) => setCalcMode(o ? "opening" : null)}
         title="Abrir Caixa"
         description="Informe apenas as quantidades de cada cédula e moeda. O sistema calcula o total."
         submitLabel="Confirmar abertura"
-        submitting={openMutation.isPending}
-        onSubmit={(payload) => openMutation.mutate(payload)}
+        submitting={openMutation.isPending || checkingCount}
+        onSubmit={(payload) => void checkThenPersist("opening", payload)}
       />
 
       <BlindCalculator
+        key={`closing-${countFormVersion}`}
         open={calcMode === "closing"}
         onOpenChange={(o) => setCalcMode(o ? "closing" : null)}
         title="Fechar Caixa"
         description="Informe apenas as quantidades de cada cédula e moeda. O sistema calcula o total."
         submitLabel="Confirmar fechamento"
-        submitting={closeMutation.isPending}
-        onSubmit={(payload) => closeMutation.mutate(payload)}
+        submitting={closeMutation.isPending || checkingCount}
+        onSubmit={(payload) => void checkThenPersist("closing", payload)}
       />
 
       <BlindCalculator
+        key={`handover-${countFormVersion}`}
         open={calcMode === "handover"}
         onOpenChange={(o) => setCalcMode(o ? "handover" : null)}
         title="Receber Turno Pendente"
         description="Conte o caixa recebido. Informe apenas as quantidades; o sistema compara com o repasse."
         submitLabel="Confirmar recebimento"
-        submitting={handoverMutation.isPending}
-        onSubmit={(payload) => handoverMutation.mutate(payload)}
+        submitting={handoverMutation.isPending || checkingCount}
+        onSubmit={(payload) => void checkThenPersist("handover", payload)}
+      />
+
+      <DivergenceRecountDialog
+        open={Boolean(pendingDivergence)}
+        attempts={pendingDivergence?.attempts ?? 0}
+        submitting={openMutation.isPending || closeMutation.isPending || handoverMutation.isPending}
+        onRecount={() => {
+          if (!pendingDivergence) return;
+          const mode = pendingDivergence.mode;
+          setPendingDivergence(null);
+          setCountFormVersion((version) => version + 1);
+          setCalcMode(mode);
+        }}
+        onConfirm={confirmDivergence}
+        onCancel={() => {
+          if (pendingDivergence) finishCount(pendingDivergence.mode);
+        }}
       />
 
       {openShift ? (

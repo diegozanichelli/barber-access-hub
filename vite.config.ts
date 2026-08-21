@@ -16,6 +16,7 @@ export default defineConfig({
             if (id.includes("node_modules/@tanstack")) return "vendor-tanstack";
             if (id.includes("node_modules/@radix-ui")) return "vendor-radix";
             if (id.includes("node_modules/lucide-react")) return "vendor-icons";
+            return undefined;
           },
         },
       },

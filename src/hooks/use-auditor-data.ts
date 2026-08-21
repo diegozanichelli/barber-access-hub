@@ -47,6 +47,7 @@ export type CashCountRow = {
   counted_by: string;
   total_calculated: number;
   created_at: string;
+  notes: string | null;
   notes_200: number;
   notes_100: number;
   notes_50: number;
@@ -94,6 +95,7 @@ export type AuditorData = AuditorReferences & {
   shifts: ShiftRow[];
   transactions: TransactionRow[];
   withdrawals: WithdrawalRow[];
+  cashCounts: CashCountRow[];
   safeBalances: Record<string, number>;
 };
 
@@ -126,10 +128,21 @@ export function useAuditorData() {
       const activeIds = shifts
         .filter((shift) => shift.status === "open" || shift.status === "pending_handover")
         .map((shift) => shift.id);
+      const disputedIds = shifts
+        .filter((shift) => shift.status === "disputed")
+        .map((shift) => shift.id);
       const transactionsRes = activeIds.length
         ? await supabase.from("transactions").select("*").in("shift_id", activeIds)
         : { data: [], error: null };
       if (transactionsRes.error) throw transactionsRes.error;
+      const cashCountsRes = disputedIds.length
+        ? await supabase
+            .from("cash_counts")
+            .select("*")
+            .in("shift_id", disputedIds)
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+      if (cashCountsRes.error) throw cashCountsRes.error;
 
       const balances = await Promise.all(
         units.map(async (unit) => {
@@ -144,6 +157,7 @@ export function useAuditorData() {
         shifts,
         transactions: (transactionsRes.data ?? []) as TransactionRow[],
         withdrawals: (withdrawalsRes.data ?? []) as WithdrawalRow[],
+        cashCounts: (cashCountsRes.data ?? []) as CashCountRow[],
         safeBalances: Object.fromEntries(balances),
         names: Object.fromEntries(
           (profilesRes.data ?? []).map((p) => [p.id, p.full_name?.trim() || "Usuário"]),

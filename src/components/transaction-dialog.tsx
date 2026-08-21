@@ -28,11 +28,14 @@ import {
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
   expenseSchema,
+  incomePhotoRequired,
   incomeSchema,
+  isMissingUpgradeEnum,
   isRoundAmount,
   parseAmount,
   safeDropSchema,
   uploadReceipt,
+  UPGRADE_DESCRIPTION_MARKER,
   type IncomeCategory,
   type PaymentMethod,
 } from "@/lib/transactions";
@@ -74,8 +77,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   );
   const hasCash = payments.some((p) => p.method === "Dinheiro");
   const hasPix = payments.some((p) => p.method === "Pix");
-  const isSubscription = category === "Assinatura Nova" || category === "Renovação";
-  const photoRequired = isIncome ? isSubscription || hasPix : isExpense;
+  const photoRequired = isIncome ? hasPix : true;
 
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
@@ -116,26 +118,35 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         });
 
         if (photoRequired && !file) {
-          throw new Error(
-            "Foto obrigatória para assinaturas (nova/renovação) e para pagamentos via Pix.",
-          );
+          throw new Error("O comprovante é obrigatório para pagamentos via Pix.");
         }
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
-        const { error: insertError } = await supabase.from("transactions").insert(
-          parsedRows.map((r) => ({
-            shift_id: shiftId,
-            unit_id: unitId,
-            user_id: userId,
-            transaction_type: "income",
-            category: r.category,
-            client_name: r.clientName,
-            payment_method: r.paymentMethod,
-            amount: r.amount,
-            photo_url: photoPath,
-          })),
-        );
-        if (insertError) throw insertError;
+        const transactionRows = parsedRows.map((r) => ({
+          shift_id: shiftId,
+          unit_id: unitId,
+          user_id: userId,
+          transaction_type: "income",
+          category: r.category,
+          description: r.category === "Upgrade" ? UPGRADE_DESCRIPTION_MARKER : null,
+          client_name: r.clientName,
+          payment_method: r.paymentMethod,
+          amount: r.amount,
+          photo_url: photoPath,
+        }));
+        const { error: insertError } = await supabase.from("transactions").insert(transactionRows);
+        if (insertError && category === "Upgrade" && isMissingUpgradeEnum(insertError)) {
+          const { error: fallbackError } = await supabase.from("transactions").insert(
+            transactionRows.map((row) => ({
+              ...row,
+              category: "Renovação" as const,
+              description: UPGRADE_DESCRIPTION_MARKER,
+            })),
+          );
+          if (fallbackError) throw fallbackError;
+        } else if (insertError) {
+          throw insertError;
+        }
         return parsedRows.reduce((s, r) => s + r.amount, 0);
       }
 
@@ -400,7 +411,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
             required={photoRequired}
             label={
               isSafeDrop
-                ? "Foto do malote (opcional)"
+                ? "Foto do comprovante da retirada"
                 : isIncome
                   ? "Foto do comprovante"
                   : "Foto da nota fiscal"
@@ -409,7 +420,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
 
           {isIncome && photoRequired ? (
             <p className="text-xs text-muted-foreground">
-              Assinaturas (nova ou renovação) e pagamentos via Pix exigem comprovante.
+              Pagamentos via Pix exigem comprovante. Nas demais modalidades a foto é opcional.
             </p>
           ) : null}
 
