@@ -129,10 +129,19 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       shiftId: string;
       quantities: CashQuantities;
       reason: string;
-    }) =>
-      correctOpeningCompatibility({
-        data: { shiftId, quantities, reason },
-      }),
+    }) => {
+      const { error } = await supabase.rpc("correct_opening_cash_count", {
+        _shift_id: shiftId,
+        _quantities: quantities,
+        _reason: reason,
+      });
+      if (error?.code === "PGRST202" || error?.message.includes("schema cache")) {
+        return correctOpeningCompatibility({
+          data: { shiftId, quantities, reason },
+        });
+      }
+      if (error) throw error;
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["audit-active-openings"] }),

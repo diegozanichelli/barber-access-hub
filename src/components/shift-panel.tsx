@@ -28,7 +28,6 @@ import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import {
   closeShiftOnServer,
-  checkCountDivergence,
   openShiftOnServer,
   receiveHandoverOnServer,
 } from "@/lib/cash-operations.functions";
@@ -56,7 +55,6 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const openShiftCompatibility = useServerFn(openShiftOnServer);
   const closeShiftCompatibility = useServerFn(closeShiftOnServer);
   const receiveHandoverCompatibility = useServerFn(receiveHandoverOnServer);
-  const checkDivergence = useServerFn(checkCountDivergence);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);

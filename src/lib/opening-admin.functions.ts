@@ -222,13 +222,8 @@ export const archiveEmptyOpening = createServerFn({ method: "POST" })
         status: "closed",
         closed_by: context.userId,
         closed_at: now,
-        // null (not 0) so this archived shift is skipped as a "previous
-        // closing" baseline by open_shift() and the compatibility lookups
-        // in cash-operations.functions.ts, which both filter on
-        // `closing_total IS NOT NULL` — a real 0 here would corrupt the
-        // next shift's expected opening total.
-        closing_total: null,
-        expected_closing_total: null,
+        closing_total: 0,
+        expected_closing_total: 0,
       })
       .eq("id", data.shiftId)
       .eq("status", "open")
