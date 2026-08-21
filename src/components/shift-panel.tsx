@@ -43,6 +43,8 @@ type Props = {
 };
 
 type CalcMode = "opening" | "closing" | "handover" | null;
+type CountPayload = { quantities: CashQuantities; total: number; notes: string };
+
 
 const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
   pending: "Pendente",
