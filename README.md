@@ -42,7 +42,11 @@ Novas contas de atendente, supervisor ou sócio ficam pendentes até a aprovaç�
 
 ### Variáveis de ambiente
 
-Crie um arquivo `.env` sem versionar segredos:
+O projeto usa dois arquivos, e a separação entre eles é uma barreira de segurança.
+
+**`.env` — versionado.** O arquivo está rastreado pelo git, então só pode conter
+valores públicos. A chave publishable já é entregue no bundle do navegador, logo
+não há segredo a proteger aqui.
 
 ```sh
 # Disponíveis no bundle do navegador
@@ -52,10 +56,21 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sua-chave-publicavel
 # Usadas pelo servidor TanStack Start
 SUPABASE_URL=https://seu-projeto.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sua-chave-publicavel
+```
+
+**`.env.local` — nunca versionado** (o `.gitignore` já o exclui via `*.local`).
+É o único lugar para segredos de servidor:
+
+```sh
 SUPABASE_SERVICE_ROLE_KEY=sua-chave-service-role
 ```
 
-A `SUPABASE_SERVICE_ROLE_KEY` é exclusiva do servidor e nunca deve receber o prefixo `VITE_`.
+A `SUPABASE_SERVICE_ROLE_KEY` **ignora todas as políticas de Row Level Security** —
+ou seja, contorna a barreira de acesso descrita em [Segurança](#segurança). Ela é
+exclusiva do servidor, nunca deve receber o prefixo `VITE_` (o que a publicaria no
+bundle do navegador) e **nunca deve ser colocada no `.env`**, que é versionado: um
+`git add -A` publicaria a chave no repositório. O Vite carrega `.env.local` com
+prioridade sobre `.env`, então basta defini-la lá.
 
 ### Instalação e execução
 
