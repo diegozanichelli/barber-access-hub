@@ -4,6 +4,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, Clock3, Loader2 } from "lucid
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DENOMINATIONS, formatBRL } from "@/lib/cash";
+import { differenceReason } from "@/lib/divergences";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type CashCountRow, type ShiftRow } from "@/hooks/use-auditor-data";
 
@@ -42,6 +43,21 @@ export function ShiftHistory() {
     },
   });
 
+  const pageShiftIds = (pageData?.rows ?? []).map((shift) => shift.id);
+  const { data: pageCounts = [], isLoading: isLoadingPageCounts } = useQuery({
+    queryKey: ["audit-shift-page-counts", pageShiftIds],
+    enabled: pageShiftIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cash_counts")
+        .select("*")
+        .in("shift_id", pageShiftIds)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CashCountRow[];
+    },
+  });
+
   const { data: counts = [] } = useQuery({
     queryKey: ["audit-shift-counts", detail?.id],
     enabled: Boolean(detail?.id),
@@ -56,7 +72,7 @@ export function ShiftHistory() {
     },
   });
 
-  if (isLoading || !references) {
+  if (isLoading || isLoadingPageCounts || !references) {
     return (
       <section className="surface-panel flex justify-center p-5">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -78,6 +94,12 @@ export function ShiftHistory() {
           a rede. Turnos abertos, fechados e divergentes aparecem juntos abaixo.
         </span>
       </div>
+      <p className="mt-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        <strong>Como ler:</strong> “Diferença do turno” compara o esperado pelo sistema com o valor
+        entregue no fechamento. “Diferença do repasse” compara o valor entregue com o que o próximo
+        colaborador contou ao receber. Portanto, dois valores de fechamento iguais não descartam uma
+        divergência no recebimento.
+      </p>
 
       {shifts.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">Nenhum turno registrado ainda.</p>
@@ -88,13 +110,16 @@ export function ShiftHistory() {
               <tr>
                 <th className="py-2 pr-3">Unidade</th>
                 <th className="py-2 pr-3">Situação</th>
+                <th className="py-2 pr-3">Onde está a diferença?</th>
                 <th className="py-2 pr-3">Abertura</th>
                 <th className="py-2 pr-3">Esperado (abertura)</th>
                 <th className="py-2 pr-3">Contado (abertura)</th>
                 <th className="py-2 pr-3">Diferença abertura</th>
                 <th className="py-2 pr-3">Esperado no Fechamento</th>
-                <th className="py-2 pr-3">Contado/Repassado</th>
+                <th className="py-2 pr-3">Entregue no fechamento</th>
                 <th className="py-2 pr-3">Diferença do Turno</th>
+                <th className="py-2 pr-3">Contado no recebimento</th>
+                <th className="py-2 pr-3">Diferença do repasse</th>
                 <th className="py-2" />
               </tr>
             </thead>
@@ -111,7 +136,26 @@ export function ShiftHistory() {
                   : null;
                 const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
                 const openingBad = Math.abs(diff) >= 0.01;
-                const bad = openingBad || shiftBad || s.status === "disputed";
+                const handoverCounts = pageCounts.filter(
+                  (cashCount) => cashCount.shift_id === s.id && cashCount.count_type === "handover",
+                );
+                const handoverCount = handoverCounts[handoverCounts.length - 1];
+                const handoverDiff = handoverCount
+                  ? Math.round(
+                      (Number(handoverCount.total_calculated) - Number(s.closing_total ?? 0)) * 100,
+                    ) / 100
+                  : null;
+                const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
+                const bad = openingBad || shiftBad || handoverBad || s.status === "disputed";
+                const reason = handoverBad
+                  ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
+                  : shiftBad
+                    ? `${differenceReason(shiftDiff)} de ${formatBRL(Math.abs(shiftDiff!))} no fechamento`
+                    : openingBad
+                      ? `${differenceReason(diff)} de ${formatBRL(Math.abs(diff))} na abertura`
+                      : s.status === "disputed"
+                        ? "Sem diferença matemática — revisar status"
+                        : "Sem divergência";
                 return (
                   <tr
                     key={s.id}
@@ -142,6 +186,11 @@ export function ShiftHistory() {
                             : "Fechado"}
                       </span>
                     </td>
+                    <td
+                      className={`py-3 pr-3 text-xs font-semibold ${bad ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {reason}
+                    </td>
                     <td className="py-3 pr-3 text-muted-foreground">
                       {new Date(s.opened_at).toLocaleString("pt-BR")}
                       <span className="block text-xs">
@@ -163,11 +212,6 @@ export function ShiftHistory() {
                     </td>
                     <td className="py-3 pr-3">
                       {s.closing_total === null ? "—" : formatBRL(s.closing_total)}
-                      {s.status === "disputed" ? (
-                        <span className="block text-xs font-semibold text-destructive">
-                          Repasse divergente
-                        </span>
-                      ) : null}
                     </td>
                     <td
                       className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
@@ -182,6 +226,29 @@ export function ShiftHistory() {
                             <span className="block text-xs">
                               {shiftDiff > 0 ? "Sobra" : "Falta"}
                             </span>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {handoverCount ? formatBRL(handoverCount.total_calculated) : "—"}
+                      {handoverCount ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {references.names[handoverCount.counted_by] ?? "Usuário"}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td
+                      className={`py-3 pr-3 font-semibold ${handoverBad ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {handoverDiff === null ? (
+                        "—"
+                      ) : (
+                        <>
+                          {handoverDiff > 0 ? "+" : ""}
+                          {formatBRL(handoverDiff)}
+                          {handoverBad ? (
+                            <span className="block text-xs">{differenceReason(handoverDiff)}</span>
                           ) : null}
                         </>
                       )}
