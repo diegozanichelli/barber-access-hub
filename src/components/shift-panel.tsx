@@ -244,6 +244,43 @@ export function ShiftPanel({ userId, unitId }: Props) {
       toast.error("Erro ao receber o turno", { description: friendlyError(error) }),
   });
 
+  function commitCount(mode: Exclude<CalcMode, null>, payload: CountPayload) {
+    setAttempts(0);
+    setDivergence(null);
+    if (mode === "opening") openMutation.mutate(payload);
+    else if (mode === "closing") closeMutation.mutate(payload);
+    else handoverMutation.mutate(payload);
+  }
+
+  /** Confere a contagem antes de gravar; o operador só sabe se bate ou não. */
+  async function submitCount(mode: Exclude<CalcMode, null>, payload: CountPayload) {
+    if (mode === "opening" && !unitId) return;
+    setChecking(true);
+    try {
+      const result = await checkDivergence({
+        data:
+          mode === "opening"
+            ? { mode, unitId: unitId!, quantities: payload.quantities }
+            : mode === "closing"
+              ? { mode, shiftId: openShift!.id, quantities: payload.quantities }
+              : { mode, pendingShiftId: pendingShift!.id, quantities: payload.quantities },
+      });
+      if (result.matches) {
+        commitCount(mode, payload);
+        return;
+      }
+      setAttempts((previous) => previous + 1);
+      setCalcMode(null);
+      setDivergence({ mode, payload });
+    } catch {
+      // Se a conferência falhar, segue o fluxo normal — o servidor valida no registro.
+      commitCount(mode, payload);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+
   async function openReceipt(path: string) {
     const url = await getReceiptUrl(path);
     if (url) window.open(url, "_blank", "noopener");
