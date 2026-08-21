@@ -55,7 +55,15 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const openShiftCompatibility = useServerFn(openShiftOnServer);
   const closeShiftCompatibility = useServerFn(closeShiftOnServer);
   const receiveHandoverCompatibility = useServerFn(receiveHandoverOnServer);
+  const checkDivergence = useServerFn(checkCountDivergence);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
+  const [checking, setChecking] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [divergence, setDivergence] = useState<{
+    mode: Exclude<CalcMode, null>;
+    payload: CountPayload;
+  } | null>(null);
+
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
