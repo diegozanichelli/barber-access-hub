@@ -27,10 +27,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import {
+  checkCountDivergence,
   closeShiftOnServer,
   openShiftOnServer,
   receiveHandoverOnServer,
 } from "@/lib/cash-operations.functions";
+
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
