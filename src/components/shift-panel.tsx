@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
 import { DivergenceRecountDialog } from "@/components/divergence-recount-dialog";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
-import { DivergenceRecountDialog } from "@/components/divergence-recount-dialog";
 
 import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
 import { TransactionChangeRequestDialog } from "@/components/transaction-change-request-dialog";
@@ -59,13 +58,6 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const receiveHandoverCompatibility = useServerFn(receiveHandoverOnServer);
   const checkDivergence = useServerFn(checkCountDivergence);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
-  const [checking, setChecking] = useState(false);
-  const [attempts, setAttempts] = useState(0);
-  const [divergence, setDivergence] = useState<{
-    mode: Exclude<CalcMode, null>;
-    payload: CountPayload;
-  } | null>(null);
-
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -652,35 +644,6 @@ export function ShiftPanel({ userId, unitId }: Props) {
           if (pendingDivergence) finishCount(pendingDivergence.mode);
         }}
       />
-
-      <DivergenceRecountDialog
-        open={Boolean(divergence)}
-        attempts={attempts}
-        submitting={
-          openMutation.isPending || closeMutation.isPending || handoverMutation.isPending
-        }
-        onOpenChange={(open) => {
-          if (!open) setDivergence(null);
-        }}
-        onRecount={() => {
-          const mode = divergence?.mode ?? null;
-          setDivergence(null);
-          setCalcMode(mode);
-        }}
-        onConfirm={(justification) => {
-          if (!divergence) return;
-          const base = divergence.payload.notes.trim();
-          const notes = [
-            base,
-            `Divergência confirmada após ${attempts} contagem(ns). Justificativa: ${justification}`,
-          ]
-            .filter(Boolean)
-            .join(" | ")
-            .slice(0, 500);
-          commitCount(divergence.mode, { ...divergence.payload, notes });
-        }}
-      />
-
 
       {openShift ? (
         <>
