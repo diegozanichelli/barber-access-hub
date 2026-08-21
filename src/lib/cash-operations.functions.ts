@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { calculateTotal, countMatchesExpected, type CashQuantities } from "@/lib/cash";
-import { computeExpectedClosing } from "@/lib/running-cash";
+import { calculateTotal, type CashQuantities } from "@/lib/cash";
 
 const quantity = z.number().int().min(0).max(1_000_000);
 const quantitiesSchema = z.object({
@@ -38,20 +37,6 @@ const receiveHandoverSchema = z.object({
   notes: z.string().trim().max(500),
 });
 
-const countCheckSchema = z.discriminatedUnion("mode", [
-  z.object({ mode: z.literal("opening"), unitId: z.string().uuid(), quantities: quantitiesSchema }),
-  z.object({
-    mode: z.literal("closing"),
-    shiftId: z.string().uuid(),
-    quantities: quantitiesSchema,
-  }),
-  z.object({
-    mode: z.literal("handover"),
-    pendingShiftId: z.string().uuid(),
-    quantities: quantitiesSchema,
-  }),
-]);
-
 type RpcResult = PromiseLike<{
   data: unknown;
   error: { code?: string; message: string } | null;
@@ -60,100 +45,6 @@ type RpcResult = PromiseLike<{
 function isMissingRpc(error: { code?: string; message: string } | null) {
   return error?.code === "PGRST202" || Boolean(error?.message.includes("schema cache"));
 }
-
-/**
- * Blind preflight: only says whether the count matches. Expected totals and
- * differences deliberately stay on the authenticated server.
- *
- * Scope note: this blindness is real for the opening and handover counts, where
- * the panel shows no totals. It is not the case at closing — shift-panel.tsx
- * displays "Dinheiro em caixa agora", which is computeRunningCash() over the
- * open shift and therefore the same figure the closing count must reach. That
- * is a deliberate product call (the operator needs it to know when to run a
- * sangria against the R$ 1.000 limit), so do not assume a closing count is
- * unaided when reasoning about the divergence-recount flow.
- */
-export const checkCountDivergence = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((data: unknown) => countCheckSchema.parse(data))
-  .handler(async ({ context, data }) => {
-    // open_shift, close_shift and receive_handover all accept the unit's own
-    // staff *or* any auditor. This preflight runs immediately before one of
-    // them, so it must not be stricter: an auditor rejected here would be
-    // blocked from a count the database would have accepted.
-    const [{ data: profile, error: profileError }, { data: roles, error: rolesError }] =
-      await Promise.all([
-        context.supabase
-          .from("profiles")
-          .select("unit_id, status")
-          .eq("id", context.userId)
-          .maybeSingle(),
-        context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
-      ]);
-    if (profileError) throw profileError;
-    if (rolesError) throw rolesError;
-
-    const isAuditor = (roles ?? []).some((row) => row.role === "auditor");
-    const isApproved = profile?.status === "approved";
-
-    function assertUnitAccess(unitId: string, message: string) {
-      if (!isApproved || (!isAuditor && profile?.unit_id !== unitId)) throw new Error(message);
-    }
-
-    let expected: number;
-
-    if (data.mode === "opening") {
-      assertUnitAccess(data.unitId, "Você não tem permissão para conferir este caixa.");
-
-      const { data: previous, error } = await context.supabase
-        .from("shifts")
-        .select("closing_total")
-        .eq("unit_id", data.unitId)
-        .eq("status", "closed")
-        .not("closing_total", "is", null)
-        .order("closed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      expected = Number(previous?.closing_total ?? 0);
-    } else if (data.mode === "closing") {
-      const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
-        await Promise.all([
-          context.supabase
-            .from("shifts")
-            .select("status, unit_id, actual_opening_total")
-            .eq("id", data.shiftId)
-            .maybeSingle(),
-          context.supabase
-            .from("transactions")
-            .select(
-              "transaction_type, payment_method, amount, reverses_transaction_id, reversed_at",
-            )
-            .eq("shift_id", data.shiftId),
-        ]);
-      if (shiftError) throw shiftError;
-      if (txError) throw txError;
-      if (!shift || shift.status !== "open") {
-        throw new Error("Este turno não está disponível para conferência.");
-      }
-      assertUnitAccess(shift.unit_id, "Você não tem permissão para conferir este caixa.");
-      expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
-    } else {
-      const { data: pending, error } = await context.supabase
-        .from("shifts")
-        .select("status, closing_total, unit_id")
-        .eq("id", data.pendingShiftId)
-        .maybeSingle();
-      if (error) throw error;
-      if (!pending || pending.status !== "pending_handover") {
-        throw new Error("Este repasse não está mais disponível para conferência.");
-      }
-      assertUnitAccess(pending.unit_id, "Você não tem permissão para receber este caixa.");
-      expected = Number(pending.closing_total ?? 0);
-    }
-
-    return { matches: countMatchesExpected(data.quantities as CashQuantities, expected) };
-  });
 
 /** Compatibility path used only while the authoritative open_shift RPC is absent. */
 export const openShiftOnServer = createServerFn({ method: "POST" })
