@@ -338,6 +338,62 @@ export type Database = {
           },
         ]
       }
+      transaction_change_requests: {
+        Row: {
+          action: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: string
+          proposed_amount: number | null
+          proposed_description: string | null
+          reason: string
+          requested_by: string
+          status: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason: string
+          requested_by: string
+          status?: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason?: string
+          requested_by?: string
+          status?: string
+          transaction_id?: string
+          transaction_snapshot?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_change_requests_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -503,6 +559,14 @@ export type Database = {
         Returns: string
       }
       current_unit_id: { Args: never; Returns: string }
+      decide_transaction_change_request: {
+        Args: { _approve: boolean; _request_id: string }
+        Returns: undefined
+      }
+      delete_empty_open_shift: {
+        Args: { _reason: string; _shift_id: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -525,15 +589,26 @@ export type Database = {
           _quantities: Json
           _unit_id: string
         }
+      }
+      master_delete_transaction: {
+        Args: { _reason: string; _transaction_id: string }
+        Returns: undefined
+      }
+      open_shift: {
+        Args: { _notes?: string; _quantities: Json; _unit_id: string }
         Returns: string
       }
       receive_handover: {
+        Args: { _notes?: string; _pending_shift_id: string; _quantities: Json }
+        Returns: Json
+      }
+      request_transaction_change: {
         Args: {
           _notes?: string
           _pending_shift_id: string
           _quantities: Json
         }
-        Returns: Json
+        Returns: string
       }
       resolve_shift_dispute: {
         Args: { _note: string; _shift_id: string }
@@ -550,10 +625,15 @@ export type Database = {
         Args: { _note: string; _withdrawal_id: string }
         Returns: undefined
       }
+      respond_partner_withdrawal: {
+        Args: { _decision: string; _withdrawal_id: string }
+        Returns: Database["public"]["Enums"]["withdrawal_status"]
+      }
       reverse_transaction: {
         Args: { _reason: string; _transaction_id: string }
         Returns: string
       }
+      shift_expected_cash: { Args: { _shift_id: string }; Returns: number }
       unit_safe_balance: { Args: { _unit_id: string }; Returns: number }
     }
     Enums: {
