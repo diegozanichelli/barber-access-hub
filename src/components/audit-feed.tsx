@@ -371,9 +371,11 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                   {formatBRL(opening.actual_opening_total)}
                 </p>
               </div>
+              {/* Corrigir é reversível; excluir não é. Só a segunda fica vermelha,
+                  senão as duas se confundem e o clique errado apaga um turno. */}
               <Button
                 size="sm"
-                variant="destructive"
+                variant="secondary"
                 onClick={() =>
                   setOpeningToCorrect({
                     id: opening.id,

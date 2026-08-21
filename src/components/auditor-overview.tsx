@@ -176,6 +176,14 @@ export function AuditorOverview({
           <p className="mt-1 text-sm text-muted-foreground">
             Veja abaixo em qual etapa o valor mudou: fechamento do turno ou recebimento do repasse.
           </p>
+          {/* Sem isto o auditor corrige um lançamento, espera o alerta sumir e não
+              entende por que ele continua — os valores abaixo são histórico, não
+              saldo recalculável. */}
+          <p className="mt-2 text-sm text-muted-foreground">
+            Corrigir lançamentos <strong>não baixa este alerta</strong>: os valores abaixo são o
+            registro do que foi contado na hora. Apure a diferença com a equipe e use{" "}
+            <strong>Encerrar divergência</strong> para marcá-la como tratada.
+          </p>
           <div className="mt-4 space-y-3">
             {disputedShifts.map(({ shift, handover, explanation }) => {
               const closingReason = differenceReason(explanation.closingDifference);
@@ -320,8 +328,9 @@ export function AuditorOverview({
                 </div>
               ))}
           </div>
+          {/* Navegação, não ação destrutiva — por isso não é vermelho. */}
           {onViewShifts ? (
-            <Button className="mt-4" variant="destructive" size="sm" onClick={onViewShifts}>
+            <Button className="mt-4" variant="secondary" size="sm" onClick={onViewShifts}>
               Ver histórico e contagens por cédula
             </Button>
           ) : null}
