@@ -1,9 +1,26 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
+import { friendlyError } from "@/lib/errors";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { differenceReason, explainShiftDivergence } from "@/lib/divergences";
 import { useAuditorData } from "@/hooks/use-auditor-data";
+
+/** O que está sendo encerrado: um turno em divergência ou uma retirada contestada. */
+type DisputeTarget = { kind: "shift" | "withdrawal"; id: string; label: string };
 
 const STATUS_LABEL: Record<string, string> = {
   open: "Aberto",
@@ -20,6 +37,34 @@ export function AuditorOverview({
   onViewShifts?: () => void;
 }) {
   const { data, isLoading } = useAuditorData();
+  const queryClient = useQueryClient();
+  const [dispute, setDispute] = useState<DisputeTarget | null>(null);
+  const [note, setNote] = useState("");
+
+  // Um turno vira 'disputed' no receive_handover e continua assim para sempre:
+  // corrigir lançamentos não mexe no status, e só estas RPCs o encerram.
+  const resolveDispute = useMutation({
+    mutationFn: async ({ kind, id, reason }: DisputeTarget & { reason: string }) => {
+      const { error } =
+        kind === "shift"
+          ? await supabase.rpc("resolve_shift_dispute", { _shift_id: id, _note: reason })
+          : await supabase.rpc("resolve_withdrawal_dispute", {
+              _withdrawal_id: id,
+              _note: reason,
+            });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
+      toast.success("Divergência encerrada", {
+        description: "A justificativa ficou registrada no histórico de auditoria.",
+      });
+      setDispute(null);
+      setNote("");
+    },
+    onError: (error: Error) =>
+      toast.error("Erro ao encerrar a divergência", { description: friendlyError(error) }),
+  });
 
   if (isLoading || !data) {
     return (
@@ -131,6 +176,14 @@ export function AuditorOverview({
           <p className="mt-1 text-sm text-muted-foreground">
             Veja abaixo em qual etapa o valor mudou: fechamento do turno ou recebimento do repasse.
           </p>
+          {/* Sem isto o auditor corrige um lançamento, espera o alerta sumir e não
+              entende por que ele continua — os valores abaixo são histórico, não
+              saldo recalculável. */}
+          <p className="mt-2 text-sm text-muted-foreground">
+            Corrigir lançamentos <strong>não baixa este alerta</strong>: os valores abaixo são o
+            registro do que foi contado na hora. Apure a diferença com a equipe e use{" "}
+            <strong>Encerrar divergência</strong> para marcá-la como tratada.
+          </p>
           <div className="mt-4 space-y-3">
             {disputedShifts.map(({ shift, handover, explanation }) => {
               const closingReason = differenceReason(explanation.closingDifference);
@@ -226,6 +279,22 @@ export function AuditorOverview({
                       <strong>Observação do recebimento:</strong> {handover.notes}
                     </p>
                   ) : null}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-3"
+                    onClick={() =>
+                      setDispute({
+                        kind: "shift",
+                        id: shift.id,
+                        label: `${data.unitNames[shift.unit_id] ?? "Unidade"} · turno de ${
+                          data.names[shift.opened_by] ?? "Usuário"
+                        }`,
+                      })
+                    }
+                  >
+                    Encerrar divergência
+                  </Button>
                 </article>
               );
             })}
@@ -234,16 +303,34 @@ export function AuditorOverview({
               .map((w) => (
                 <div
                   key={w.id}
-                  className="rounded-lg border border-destructive/40 bg-background/50 p-3 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/40 bg-background/50 p-3 text-sm"
                 >
-                  Retirada contestada · {data.unitNames[w.unit_id] ?? "Unidade"} ·{" "}
-                  {formatBRL(w.amount)} · {data.names[w.partner_id] ?? "Sócio"} ·{" "}
-                  {new Date(w.created_at).toLocaleString("pt-BR")}
+                  <span>
+                    Retirada contestada · {data.unitNames[w.unit_id] ?? "Unidade"} ·{" "}
+                    {formatBRL(w.amount)} · {data.names[w.partner_id] ?? "Sócio"} ·{" "}
+                    {new Date(w.created_at).toLocaleString("pt-BR")}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      setDispute({
+                        kind: "withdrawal",
+                        id: w.id,
+                        label: `Retirada de ${formatBRL(w.amount)} · ${
+                          data.names[w.partner_id] ?? "Sócio"
+                        }`,
+                      })
+                    }
+                  >
+                    Encerrar divergência
+                  </Button>
                 </div>
               ))}
           </div>
+          {/* Navegação, não ação destrutiva — por isso não é vermelho. */}
           {onViewShifts ? (
-            <Button className="mt-4" variant="destructive" size="sm" onClick={onViewShifts}>
+            <Button className="mt-4" variant="secondary" size="sm" onClick={onViewShifts}>
               Ver histórico e contagens por cédula
             </Button>
           ) : null}
@@ -332,6 +419,65 @@ export function AuditorOverview({
           ))}
         </div>
       </section>
+
+      <Dialog
+        open={Boolean(dispute)}
+        onOpenChange={(open) => {
+          if (!open && !resolveDispute.isPending) {
+            setDispute(null);
+            setNote("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Encerrar divergência?</DialogTitle>
+            <DialogDescription>
+              As contagens registradas não mudam — elas são o histórico do que foi contado. Isto
+              apenas marca a divergência como tratada e guarda a sua justificativa na auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          {dispute ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              <p className="font-semibold">{dispute.label}</p>
+            </div>
+          ) : null}
+          <Textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Explique como a diferença foi apurada e resolvida"
+            aria-label="Como a divergência foi resolvida"
+            disabled={resolveDispute.isPending}
+          />
+          {note.length > 0 && note.trim().length < 5 ? (
+            <p className="text-xs font-semibold text-destructive">
+              Informe pelo menos 5 caracteres.
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDispute(null);
+                setNote("");
+              }}
+              disabled={resolveDispute.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={note.trim().length < 5 || resolveDispute.isPending}
+              onClick={() => {
+                if (!dispute) return;
+                resolveDispute.mutate({ ...dispute, reason: note.trim() });
+              }}
+            >
+              {resolveDispute.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Encerrar divergência
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
