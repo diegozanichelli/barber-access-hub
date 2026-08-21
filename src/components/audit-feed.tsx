@@ -140,7 +140,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         queryClient.invalidateQueries({ queryKey: ["audit-shift"] }),
       ]);
       toast.success("Abertura corrigida", {
-        description: "O caixa foi recalculado e a alteração ficou registrada na auditoria.",
+        description:
+          "O caixa foi recalculado e a divergência que originou esta abertura, se houver, foi encerrada com a justificativa registrada na auditoria.",
       });
       setOpeningToCorrect(null);
     },
