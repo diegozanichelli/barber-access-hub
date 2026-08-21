@@ -37,6 +37,67 @@ const receiveHandoverSchema = z.object({
   notes: z.string().trim().max(500),
 });
 
+const divergenceCheckSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("opening"),
+    unitId: z.string().uuid(),
+    quantities: quantitiesSchema,
+  }),
+  z.object({
+    mode: z.literal("closing"),
+    shiftId: z.string().uuid(),
+    quantities: quantitiesSchema,
+  }),
+  z.object({
+    mode: z.literal("handover"),
+    pendingShiftId: z.string().uuid(),
+    quantities: quantitiesSchema,
+  }),
+]);
+
+/**
+ * Contagem cega: devolve apenas se o valor contado bate com o esperado.
+ * Nunca expõe o valor esperado nem a diferença ao operador.
+ */
+export const checkCountDivergence = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => divergenceCheckSchema.parse(data))
+  .handler(async ({ context, data }) => {
+    const total = calculateTotal(data.quantities as CashQuantities);
+    let expected: number | null = null;
+
+    if (data.mode === "closing") {
+      const { data: value, error } = await context.supabase.rpc("shift_expected_cash", {
+        _shift_id: data.shiftId,
+      });
+      if (error) return { matches: true, hasExpectation: false };
+      expected = Number(value ?? 0);
+    } else if (data.mode === "handover") {
+      const { data: pending, error } = await context.supabase
+        .from("shifts")
+        .select("closing_total")
+        .eq("id", data.pendingShiftId)
+        .maybeSingle();
+      if (error) throw error;
+      expected = pending?.closing_total === null ? null : Number(pending?.closing_total ?? 0);
+    } else {
+      const { data: previous, error } = await context.supabase
+        .from("shifts")
+        .select("closing_total")
+        .eq("unit_id", data.unitId)
+        .eq("status", "closed")
+        .not("closing_total", "is", null)
+        .order("closed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      expected = previous ? Number(previous.closing_total) : null;
+    }
+
+    if (expected === null) return { matches: true, hasExpectation: false };
+    return { matches: Math.abs(total - expected) < 0.005, hasExpectation: true };
+  });
+
 type RpcResult = PromiseLike<{
   data: unknown;
   error: { code?: string; message: string } | null;
