@@ -69,18 +69,33 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => countCheckSchema.parse(data))
   .handler(async ({ context, data }) => {
+    // open_shift, close_shift and receive_handover all accept the unit's own
+    // staff *or* any auditor. This preflight runs immediately before one of
+    // them, so it must not be stricter: an auditor rejected here would be
+    // blocked from a count the database would have accepted.
+    const [{ data: profile, error: profileError }, { data: roles, error: rolesError }] =
+      await Promise.all([
+        context.supabase
+          .from("profiles")
+          .select("unit_id, status")
+          .eq("id", context.userId)
+          .maybeSingle(),
+        context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
+      ]);
+    if (profileError) throw profileError;
+    if (rolesError) throw rolesError;
+
+    const isAuditor = (roles ?? []).some((row) => row.role === "auditor");
+    const isApproved = profile?.status === "approved";
+
+    function assertUnitAccess(unitId: string, message: string) {
+      if (!isApproved || (!isAuditor && profile?.unit_id !== unitId)) throw new Error(message);
+    }
+
     let expected: number;
 
     if (data.mode === "opening") {
-      const { data: profile, error: profileError } = await context.supabase
-        .from("profiles")
-        .select("unit_id, status")
-        .eq("id", context.userId)
-        .maybeSingle();
-      if (profileError) throw profileError;
-      if (profile?.status !== "approved" || profile.unit_id !== data.unitId) {
-        throw new Error("Você não tem permissão para conferir este caixa.");
-      }
+      assertUnitAccess(data.unitId, "Você não tem permissão para conferir este caixa.");
 
       const { data: previous, error } = await context.supabase
         .from("shifts")
@@ -113,15 +128,7 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
       if (!shift || shift.status !== "open") {
         throw new Error("Este turno não está disponível para conferência.");
       }
-      const { data: profile, error: profileError } = await context.supabase
-        .from("profiles")
-        .select("unit_id, status")
-        .eq("id", context.userId)
-        .maybeSingle();
-      if (profileError) throw profileError;
-      if (profile?.status !== "approved" || profile.unit_id !== shift.unit_id) {
-        throw new Error("Você não tem permissão para conferir este caixa.");
-      }
+      assertUnitAccess(shift.unit_id, "Você não tem permissão para conferir este caixa.");
       expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
     } else {
       const { data: pending, error } = await context.supabase
@@ -133,15 +140,7 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
       if (!pending || pending.status !== "pending_handover") {
         throw new Error("Este repasse não está mais disponível para conferência.");
       }
-      const { data: profile, error: profileError } = await context.supabase
-        .from("profiles")
-        .select("unit_id, status")
-        .eq("id", context.userId)
-        .maybeSingle();
-      if (profileError) throw profileError;
-      if (profile?.status !== "approved" || profile.unit_id !== pending.unit_id) {
-        throw new Error("Você não tem permissão para receber este caixa.");
-      }
+      assertUnitAccess(pending.unit_id, "Você não tem permissão para receber este caixa.");
       expected = Number(pending.closing_total ?? 0);
     }
 

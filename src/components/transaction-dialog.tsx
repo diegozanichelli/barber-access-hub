@@ -28,6 +28,7 @@ import {
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
   expenseSchema,
+  incomePhotoRequired,
   incomeSchema,
   isMissingUpgradeEnum,
   isRoundAmount,
@@ -75,8 +76,12 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     0,
   );
   const hasCash = payments.some((p) => p.method === "Dinheiro");
-  const hasPix = payments.some((p) => p.method === "Pix");
-  const photoRequired = isIncome ? hasPix : true;
+  // Delegates to the rule covered by lib/transactions.test.ts instead of
+  // restating it, so the tests actually guard what ships. A split payment needs
+  // evidence when any of its methods does; every cash outflow always needs it.
+  const photoRequired = isIncome
+    ? payments.some((p) => incomePhotoRequired(category, p.method))
+    : true;
 
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
