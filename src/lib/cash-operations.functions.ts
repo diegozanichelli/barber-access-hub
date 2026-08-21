@@ -64,6 +64,14 @@ function isMissingRpc(error: { code?: string; message: string } | null) {
 /**
  * Blind preflight: only says whether the count matches. Expected totals and
  * differences deliberately stay on the authenticated server.
+ *
+ * Scope note: this blindness is real for the opening and handover counts, where
+ * the panel shows no totals. It is not the case at closing — shift-panel.tsx
+ * displays "Dinheiro em caixa agora", which is computeRunningCash() over the
+ * open shift and therefore the same figure the closing count must reach. That
+ * is a deliberate product call (the operator needs it to know when to run a
+ * sangria against the R$ 1.000 limit), so do not assume a closing count is
+ * unaided when reasoning about the divergence-recount flow.
  */
 export const checkCountDivergence = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
