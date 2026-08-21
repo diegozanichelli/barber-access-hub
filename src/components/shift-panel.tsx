@@ -576,8 +576,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
         title="Abrir Caixa"
         description="Informe apenas as quantidades de cada cédula e moeda. O sistema calcula o total."
         submitLabel="Confirmar abertura"
-        submitting={openMutation.isPending}
-        onSubmit={(payload) => openMutation.mutate(payload)}
+        submitting={openMutation.isPending || checking}
+        onSubmit={(payload) => void submitCount("opening", payload)}
       />
 
       <BlindCalculator
@@ -586,8 +586,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
         title="Fechar Caixa"
         description="Informe apenas as quantidades de cada cédula e moeda. O sistema calcula o total."
         submitLabel="Confirmar fechamento"
-        submitting={closeMutation.isPending}
-        onSubmit={(payload) => closeMutation.mutate(payload)}
+        submitting={closeMutation.isPending || checking}
+        onSubmit={(payload) => void submitCount("closing", payload)}
       />
 
       <BlindCalculator
@@ -596,9 +596,38 @@ export function ShiftPanel({ userId, unitId }: Props) {
         title="Receber Turno Pendente"
         description="Conte o caixa recebido. Informe apenas as quantidades; o sistema compara com o repasse."
         submitLabel="Confirmar recebimento"
-        submitting={handoverMutation.isPending}
-        onSubmit={(payload) => handoverMutation.mutate(payload)}
+        submitting={handoverMutation.isPending || checking}
+        onSubmit={(payload) => void submitCount("handover", payload)}
       />
+
+      <DivergenceRecountDialog
+        open={Boolean(divergence)}
+        attempts={attempts}
+        submitting={
+          openMutation.isPending || closeMutation.isPending || handoverMutation.isPending
+        }
+        onOpenChange={(open) => {
+          if (!open) setDivergence(null);
+        }}
+        onRecount={() => {
+          const mode = divergence?.mode ?? null;
+          setDivergence(null);
+          setCalcMode(mode);
+        }}
+        onConfirm={(justification) => {
+          if (!divergence) return;
+          const base = divergence.payload.notes.trim();
+          const notes = [
+            base,
+            `Divergência confirmada após ${attempts} contagem(ns). Justificativa: ${justification}`,
+          ]
+            .filter(Boolean)
+            .join(" | ")
+            .slice(0, 500);
+          commitCount(divergence.mode, { ...divergence.payload, notes });
+        }}
+      />
+
 
       {openShift ? (
         <>
