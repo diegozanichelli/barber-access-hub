@@ -146,7 +146,13 @@ export function ShiftHistory() {
                     ) / 100
                   : null;
                 const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
-                const bad = openingBad || shiftBad || handoverBad || s.status === "disputed";
+                // A diferença registrada nunca some — é o histórico do que foi
+                // contado. O que muda ao encerrar é o alarme: uma divergência já
+                // tratada não deve seguir vermelha como se fosse pendência.
+                const resolved = Boolean(s.resolved_at);
+                const hasDifference =
+                  openingBad || shiftBad || handoverBad || s.status === "disputed";
+                const bad = hasDifference && !resolved;
                 const reason = handoverBad
                   ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
                   : shiftBad
@@ -183,13 +189,24 @@ export function ShiftHistory() {
                           ? "Aberto"
                           : s.status === "disputed"
                             ? "Com divergência"
-                            : "Fechado"}
+                            : resolved && hasDifference
+                              ? "Divergência encerrada"
+                              : "Fechado"}
                       </span>
                     </td>
                     <td
                       className={`py-3 pr-3 text-xs font-semibold ${bad ? "text-destructive" : "text-muted-foreground"}`}
                     >
                       {reason}
+                      {resolved && hasDifference ? (
+                        <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                          Encerrada
+                          {s.resolved_at
+                            ? ` em ${new Date(s.resolved_at).toLocaleString("pt-BR")}`
+                            : ""}
+                          {s.resolution_note ? `: ${s.resolution_note}` : ""}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="py-3 pr-3 text-muted-foreground">
                       {new Date(s.opened_at).toLocaleString("pt-BR")}
