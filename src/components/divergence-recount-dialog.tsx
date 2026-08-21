@@ -1,128 +1,110 @@
-import { useState } from "react";
-import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-const MIN_JUSTIFICATION = 10;
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 type Props = {
   open: boolean;
   attempts: number;
   submitting?: boolean;
   onRecount: () => void;
-  onConfirm: (justification: string) => void;
-  onOpenChange: (open: boolean) => void;
+  onConfirm: (reason: string) => void;
+  onCancel: () => void;
 };
 
-/**
- * Alerta de divergência exibido ANTES de gravar a contagem.
- * Nenhum valor é revelado: a contagem segue cega, o operador só sabe que não bate.
- */
 export function DivergenceRecountDialog({
   open,
   attempts,
   submitting,
   onRecount,
   onConfirm,
-  onOpenChange,
+  onCancel,
 }: Props) {
-  const [justifying, setJustifying] = useState(false);
-  const [justification, setJustification] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState("");
+  const validReason = reason.trim().length >= 10;
 
-  function reset() {
-    setJustifying(false);
-    setJustification("");
-  }
+  useEffect(() => {
+    if (!open) {
+      setConfirming(false);
+      setReason("");
+    }
+  }, [open]);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={(next) => !next && !submitting && onCancel()}>
+      <DialogContent className="border-destructive/70 sm:max-w-md">
         <DialogHeader>
-          <div className="flex items-start gap-2 text-destructive">
-            <AlertTriangle className="mt-0.5 size-6 shrink-0" aria-hidden />
-            <DialogTitle className="text-destructive">
-              A contagem não confere com o esperado
-            </DialogTitle>
+          <div className="mb-1 flex size-11 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+            <AlertTriangle className="size-6" aria-hidden />
           </div>
+          <DialogTitle className="text-destructive">A contagem não confere</DialogTitle>
           <DialogDescription>
-            Reconte o dinheiro com calma, cédula por cédula e moeda por moeda. Na maioria das vezes é
-            só um erro simples de contagem.
+            Conte novamente todas as cédulas e moedas. Por segurança, o valor esperado e a diferença
+            não são exibidos durante a contagem cega.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-          Por segurança, o sistema não mostra o valor esperado nem a diferença. Nada foi gravado
-          ainda.
-          {attempts > 1 ? (
-            <span className="mt-1 block text-xs font-semibold">
-              Tentativas de contagem até agora: {attempts}
-            </span>
-          ) : null}
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+          <strong>Tentativa {attempts}</strong>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Nenhum valor foi gravado. Você pode recontar quantas vezes precisar.
+          </p>
         </div>
 
-        {justifying ? (
+        {confirming ? (
           <div className="space-y-2">
-            <Label htmlFor="divergence-justification">
-              Justificativa da diferença (obrigatória)
-            </Label>
+            <Label htmlFor="divergence-reason">Justificativa obrigatória</Label>
             <Textarea
-              id="divergence-justification"
-              rows={3}
-              placeholder="Ex.: recontei três vezes e continua faltando; possível troco entregue a mais."
-              value={justification}
-              onChange={(event) => setJustification(event.target.value)}
+              id="divergence-reason"
+              autoFocus
+              maxLength={350}
+              rows={4}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Explique por que a contagem divergente deve ser confirmada…"
             />
-            <p className="text-xs text-muted-foreground">
-              Mínimo de {MIN_JUSTIFICATION} caracteres. A auditoria será notificada com esta
-              justificativa.
+            <p
+              className={validReason ? "text-xs text-muted-foreground" : "text-xs text-destructive"}
+            >
+              Mínimo de 10 caracteres · {reason.trim().length}/350
             </p>
           </div>
         ) : null}
 
-        <div className="grid gap-2">
-          <Button
-            className="min-h-12 w-full"
-            disabled={submitting}
-            onClick={() => {
-              reset();
-              onRecount();
-            }}
-          >
-            <RefreshCw className="size-4" aria-hidden />
-            Recontar o dinheiro
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button type="button" variant="outline" disabled={submitting} onClick={onRecount}>
+            <RefreshCw /> Recontar o dinheiro
           </Button>
-          <Button
-            variant="destructive"
-            className="min-h-12 w-full"
-            disabled={
-              submitting || (justifying && justification.trim().length < MIN_JUSTIFICATION)
-            }
-            onClick={() => {
-              if (!justifying) {
-                setJustifying(true);
-                return;
-              }
-              onConfirm(justification.trim());
-            }}
-          >
-            {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            {justifying ? "Registrar divergência e continuar" : "Confirmar mesmo assim"}
-          </Button>
-        </div>
+          {confirming ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!validReason || submitting}
+              onClick={() => onConfirm(reason.trim())}
+            >
+              Confirmar divergência
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={submitting}
+              onClick={() => setConfirming(true)}
+            >
+              Confirmar mesmo assim
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -309,6 +309,11 @@ export function ShiftHistory() {
                 <p className="text-xs text-muted-foreground">
                   {new Date(c.created_at).toLocaleString("pt-BR")}
                 </p>
+                {c.notes ? (
+                  <p className="mt-2 rounded-md border border-border/60 bg-muted/50 p-2 text-xs text-muted-foreground">
+                    <strong>Observação:</strong> {c.notes}
+                  </p>
+                ) : null}
                 <ul className="mt-3 space-y-1 text-sm">
                   {DENOMINATIONS.map((d) => (
                     <li key={d.field} className="flex justify-between">

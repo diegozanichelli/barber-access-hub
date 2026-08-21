@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { calculateTotal, type CashQuantities } from "@/lib/cash";
+import { calculateTotal, countMatchesExpected, type CashQuantities } from "@/lib/cash";
+import { computeExpectedClosing } from "@/lib/running-cash";
 
 const quantity = z.number().int().min(0).max(1_000_000);
 const quantitiesSchema = z.object({
@@ -37,12 +38,8 @@ const receiveHandoverSchema = z.object({
   notes: z.string().trim().max(500),
 });
 
-const divergenceCheckSchema = z.discriminatedUnion("mode", [
-  z.object({
-    mode: z.literal("opening"),
-    unitId: z.string().uuid(),
-    quantities: quantitiesSchema,
-  }),
+const countCheckSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("opening"), unitId: z.string().uuid(), quantities: quantitiesSchema }),
   z.object({
     mode: z.literal("closing"),
     shiftId: z.string().uuid(),
@@ -55,32 +52,36 @@ const divergenceCheckSchema = z.discriminatedUnion("mode", [
   }),
 ]);
 
+type RpcResult = PromiseLike<{
+  data: unknown;
+  error: { code?: string; message: string } | null;
+}>;
+
+function isMissingRpc(error: { code?: string; message: string } | null) {
+  return error?.code === "PGRST202" || Boolean(error?.message.includes("schema cache"));
+}
+
 /**
- * Contagem cega: devolve apenas se o valor contado bate com o esperado.
- * Nunca expõe o valor esperado nem a diferença ao operador.
+ * Blind preflight: only says whether the count matches. Expected totals and
+ * differences deliberately stay on the authenticated server.
  */
 export const checkCountDivergence = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: unknown) => divergenceCheckSchema.parse(data))
+  .validator((data: unknown) => countCheckSchema.parse(data))
   .handler(async ({ context, data }) => {
-    const total = calculateTotal(data.quantities as CashQuantities);
-    let expected: number | null = null;
+    let expected: number;
 
-    if (data.mode === "closing") {
-      const { data: value, error } = await context.supabase.rpc("shift_expected_cash", {
-        _shift_id: data.shiftId,
-      });
-      if (error) return { matches: true, hasExpectation: false };
-      expected = Number(value ?? 0);
-    } else if (data.mode === "handover") {
-      const { data: pending, error } = await context.supabase
-        .from("shifts")
-        .select("closing_total")
-        .eq("id", data.pendingShiftId)
+    if (data.mode === "opening") {
+      const { data: profile, error: profileError } = await context.supabase
+        .from("profiles")
+        .select("unit_id, status")
+        .eq("id", context.userId)
         .maybeSingle();
-      if (error) throw error;
-      expected = pending?.closing_total === null ? null : Number(pending?.closing_total ?? 0);
-    } else {
+      if (profileError) throw profileError;
+      if (profile?.status !== "approved" || profile.unit_id !== data.unitId) {
+        throw new Error("Você não tem permissão para conferir este caixa.");
+      }
+
       const { data: previous, error } = await context.supabase
         .from("shifts")
         .select("closing_total")
@@ -91,21 +92,61 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      expected = previous ? Number(previous.closing_total) : null;
+      expected = Number(previous?.closing_total ?? 0);
+    } else if (data.mode === "closing") {
+      const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
+        await Promise.all([
+          context.supabase
+            .from("shifts")
+            .select("status, unit_id, actual_opening_total")
+            .eq("id", data.shiftId)
+            .maybeSingle(),
+          context.supabase
+            .from("transactions")
+            .select(
+              "transaction_type, payment_method, amount, reverses_transaction_id, reversed_at",
+            )
+            .eq("shift_id", data.shiftId),
+        ]);
+      if (shiftError) throw shiftError;
+      if (txError) throw txError;
+      if (!shift || shift.status !== "open") {
+        throw new Error("Este turno não está disponível para conferência.");
+      }
+      const { data: profile, error: profileError } = await context.supabase
+        .from("profiles")
+        .select("unit_id, status")
+        .eq("id", context.userId)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (profile?.status !== "approved" || profile.unit_id !== shift.unit_id) {
+        throw new Error("Você não tem permissão para conferir este caixa.");
+      }
+      expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
+    } else {
+      const { data: pending, error } = await context.supabase
+        .from("shifts")
+        .select("status, closing_total, unit_id")
+        .eq("id", data.pendingShiftId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!pending || pending.status !== "pending_handover") {
+        throw new Error("Este repasse não está mais disponível para conferência.");
+      }
+      const { data: profile, error: profileError } = await context.supabase
+        .from("profiles")
+        .select("unit_id, status")
+        .eq("id", context.userId)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (profile?.status !== "approved" || profile.unit_id !== pending.unit_id) {
+        throw new Error("Você não tem permissão para receber este caixa.");
+      }
+      expected = Number(pending.closing_total ?? 0);
     }
 
-    if (expected === null) return { matches: true, hasExpectation: false };
-    return { matches: Math.abs(total - expected) < 0.005, hasExpectation: true };
+    return { matches: countMatchesExpected(data.quantities as CashQuantities, expected) };
   });
-
-type RpcResult = PromiseLike<{
-  data: unknown;
-  error: { code?: string; message: string } | null;
-}>;
-
-function isMissingRpc(error: { code?: string; message: string } | null) {
-  return error?.code === "PGRST202" || Boolean(error?.message.includes("schema cache"));
-}
 
 /** Compatibility path used only while the authoritative open_shift RPC is absent. */
 export const openShiftOnServer = createServerFn({ method: "POST" })
