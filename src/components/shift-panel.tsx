@@ -17,6 +17,8 @@ import {
 import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
+import { DivergenceRecountDialog } from "@/components/divergence-recount-dialog";
+
 import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
 import { TransactionChangeRequestDialog } from "@/components/transaction-change-request-dialog";
 import { WithdrawalDialog } from "@/components/withdrawal-dialog";
