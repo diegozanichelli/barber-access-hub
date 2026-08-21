@@ -9,6 +9,9 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Permite disparar manualmente pela aba Ações, útil para conferir a CI sem
+  # precisar abrir uma PR. Só aparece depois que este arquivo estiver na main.
+  workflow_dispatch:
 
 permissions:
   contents: read
