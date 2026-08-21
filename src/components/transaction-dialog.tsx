@@ -28,6 +28,7 @@ import {
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
   expenseSchema,
+  incomePhotoRequired,
   incomeSchema,
   isMissingUpgradeEnum,
   isRoundAmount,
