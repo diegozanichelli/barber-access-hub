@@ -17,6 +17,8 @@ import {
 import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
+import { DivergenceRecountDialog } from "@/components/divergence-recount-dialog";
+
 import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
 import { TransactionChangeRequestDialog } from "@/components/transaction-change-request-dialog";
 import { WithdrawalDialog } from "@/components/withdrawal-dialog";
@@ -25,10 +27,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import {
+  checkCountDivergence,
   closeShiftOnServer,
   openShiftOnServer,
   receiveHandoverOnServer,
 } from "@/lib/cash-operations.functions";
+
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 
 import { getReceiptUrl } from "@/lib/transactions";
@@ -39,6 +43,8 @@ type Props = {
 };
 
 type CalcMode = "opening" | "closing" | "handover" | null;
+type CountPayload = { quantities: CashQuantities; total: number; notes: string };
+
 
 const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
   pending: "Pendente",
@@ -51,7 +57,15 @@ export function ShiftPanel({ userId, unitId }: Props) {
   const openShiftCompatibility = useServerFn(openShiftOnServer);
   const closeShiftCompatibility = useServerFn(closeShiftOnServer);
   const receiveHandoverCompatibility = useServerFn(receiveHandoverOnServer);
+  const checkDivergence = useServerFn(checkCountDivergence);
   const [calcMode, setCalcMode] = useState<CalcMode>(null);
+  const [checking, setChecking] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [divergence, setDivergence] = useState<{
+    mode: Exclude<CalcMode, null>;
+    payload: CountPayload;
+  } | null>(null);
+
   const [txType, setTxType] = useState<TransactionDialogType>(null);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -229,6 +243,43 @@ export function ShiftPanel({ userId, unitId }: Props) {
     onError: (error: Error) =>
       toast.error("Erro ao receber o turno", { description: friendlyError(error) }),
   });
+
+  function commitCount(mode: Exclude<CalcMode, null>, payload: CountPayload) {
+    setAttempts(0);
+    setDivergence(null);
+    if (mode === "opening") openMutation.mutate(payload);
+    else if (mode === "closing") closeMutation.mutate(payload);
+    else handoverMutation.mutate(payload);
+  }
+
+  /** Confere a contagem antes de gravar; o operador só sabe se bate ou não. */
+  async function submitCount(mode: Exclude<CalcMode, null>, payload: CountPayload) {
+    if (mode === "opening" && !unitId) return;
+    setChecking(true);
+    try {
+      const result = await checkDivergence({
+        data:
+          mode === "opening"
+            ? { mode, unitId: unitId!, quantities: payload.quantities }
+            : mode === "closing"
+              ? { mode, shiftId: openShift!.id, quantities: payload.quantities }
+              : { mode, pendingShiftId: pendingShift!.id, quantities: payload.quantities },
+      });
+      if (result.matches) {
+        commitCount(mode, payload);
+        return;
+      }
+      setAttempts((previous) => previous + 1);
+      setCalcMode(null);
+      setDivergence({ mode, payload });
+    } catch {
+      // Se a conferência falhar, segue o fluxo normal — o servidor valida no registro.
+      commitCount(mode, payload);
+    } finally {
+      setChecking(false);
+    }
+  }
+
 
   async function openReceipt(path: string) {
     const url = await getReceiptUrl(path);
@@ -525,8 +576,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
         title="Abrir Caixa"
         description="Informe apenas as quantidades de cada cédula e moeda. O sistema calcula o total."
         submitLabel="Confirmar abertura"
-        submitting={openMutation.isPending}
-        onSubmit={(payload) => openMutation.mutate(payload)}
+        submitting={openMutation.isPending || checking}
+        onSubmit={(payload) => void submitCount("opening", payload)}
       />
 
       <BlindCalculator
@@ -535,8 +586,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
         title="Fechar Caixa"
         description="Informe apenas as quantidades de cada cédula e moeda. O sistema calcula o total."
         submitLabel="Confirmar fechamento"
-        submitting={closeMutation.isPending}
-        onSubmit={(payload) => closeMutation.mutate(payload)}
+        submitting={closeMutation.isPending || checking}
+        onSubmit={(payload) => void submitCount("closing", payload)}
       />
 
       <BlindCalculator
@@ -545,9 +596,38 @@ export function ShiftPanel({ userId, unitId }: Props) {
         title="Receber Turno Pendente"
         description="Conte o caixa recebido. Informe apenas as quantidades; o sistema compara com o repasse."
         submitLabel="Confirmar recebimento"
-        submitting={handoverMutation.isPending}
-        onSubmit={(payload) => handoverMutation.mutate(payload)}
+        submitting={handoverMutation.isPending || checking}
+        onSubmit={(payload) => void submitCount("handover", payload)}
       />
+
+      <DivergenceRecountDialog
+        open={Boolean(divergence)}
+        attempts={attempts}
+        submitting={
+          openMutation.isPending || closeMutation.isPending || handoverMutation.isPending
+        }
+        onOpenChange={(open) => {
+          if (!open) setDivergence(null);
+        }}
+        onRecount={() => {
+          const mode = divergence?.mode ?? null;
+          setDivergence(null);
+          setCalcMode(mode);
+        }}
+        onConfirm={(justification) => {
+          if (!divergence) return;
+          const base = divergence.payload.notes.trim();
+          const notes = [
+            base,
+            `Divergência confirmada após ${attempts} contagem(ns). Justificativa: ${justification}`,
+          ]
+            .filter(Boolean)
+            .join(" | ")
+            .slice(0, 500);
+          commitCount(divergence.mode, { ...divergence.payload, notes });
+        }}
+      />
+
 
       {openShift ? (
         <>
