@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
 import { DivergenceRecountDialog } from "@/components/divergence-recount-dialog";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
+import { ShiftReminderBanner } from "@/components/shift-reminder-banner";
 
 import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
 import { TransactionChangeRequestDialog } from "@/components/transaction-change-request-dialog";
@@ -354,6 +355,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
   return (
     <>
       {openShift && isOverLimit(runningCash) ? <CashLimitBanner runningCash={runningCash} /> : null}
+
+      {openShift ? <ShiftReminderBanner openedAt={openShift.opened_at} userId={userId} /> : null}
 
       {lastResult ? (
         <section className="surface-panel p-5">
