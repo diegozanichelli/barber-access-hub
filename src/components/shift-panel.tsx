@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, type CashQuantities } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import {
+  checkCountDivergence,
   closeShiftOnServer,
   openShiftOnServer,
   receiveHandoverOnServer,
@@ -53,6 +54,7 @@ const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
 
 export function ShiftPanel({ userId, unitId }: Props) {
   const queryClient = useQueryClient();
+  const checkDivergence = useServerFn(checkCountDivergence);
   const openShiftCompatibility = useServerFn(openShiftOnServer);
   const closeShiftCompatibility = useServerFn(closeShiftOnServer);
   const receiveHandoverCompatibility = useServerFn(receiveHandoverOnServer);

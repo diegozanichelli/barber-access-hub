@@ -279,3 +279,76 @@ export const receiveHandoverOnServer = createServerFn({ method: "POST" })
       mode: "legacy" as const,
     };
   });
+
+const divergenceCheckSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("opening"), unitId: z.string().uuid(), quantities: quantitiesSchema }),
+  z.object({ mode: z.literal("closing"), shiftId: z.string().uuid(), quantities: quantitiesSchema }),
+  z.object({
+    mode: z.literal("handover"),
+    pendingShiftId: z.string().uuid(),
+    quantities: quantitiesSchema,
+  }),
+]);
+
+/**
+ * Confere a contagem contra o valor teórico sem revelar o valor esperado:
+ * devolve apenas se bate ou não, preservando a contagem cega.
+ */
+export const checkCountDivergence = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => divergenceCheckSchema.parse(data))
+  .handler(async ({ context, data }): Promise<{ matches: boolean }> => {
+    const total = calculateTotal(data.quantities as CashQuantities);
+    let expected = 0;
+
+    if (data.mode === "opening") {
+      const { data: last } = await context.supabase
+        .from("shifts")
+        .select("closing_total")
+        .eq("unit_id", data.unitId)
+        .eq("status", "closed")
+        .not("closing_total", "is", null)
+        .order("closed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      expected = Number(last?.closing_total ?? 0);
+    } else if (data.mode === "handover") {
+      const { data: pending, error } = await context.supabase
+        .from("shifts")
+        .select("closing_total, status")
+        .eq("id", data.pendingShiftId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!pending || pending.status !== "pending_handover") {
+        throw new Error("Este repasse já foi recebido. Atualize a tela.");
+      }
+      expected = Number(pending.closing_total ?? 0);
+    } else {
+      const { data: shift, error } = await context.supabase
+        .from("shifts")
+        .select("actual_opening_total, status")
+        .eq("id", data.shiftId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!shift || shift.status !== "open") {
+        throw new Error("Este turno já foi fechado. Atualize a tela.");
+      }
+      const { data: rows, error: txError } = await context.supabase
+        .from("transactions")
+        .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
+        .eq("shift_id", data.shiftId);
+      if (txError) throw txError;
+      const movement = (rows ?? [])
+        .filter((row) => !row.reverses_transaction_id && !row.reversed_at)
+        .reduce((sum, row) => {
+          const amount = Number(row.amount ?? 0);
+          if (row.transaction_type === "income") {
+            return row.payment_method === "Dinheiro" ? sum + amount : sum;
+          }
+          return sum - amount;
+        }, 0);
+      expected = Number(shift.actual_opening_total ?? 0) + movement;
+    }
+
+    return { matches: Math.abs(Math.round((expected - total) * 100)) < 1 };
+  });
