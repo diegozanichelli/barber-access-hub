@@ -130,7 +130,15 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       quantities: CashQuantities;
       reason: string;
     }) => {
-      const { error } = await supabase.rpc("correct_opening_cash_count", {
+      // A RPC pode ainda não estar publicada neste projeto; o nome é passado
+      // por um cliente com tipagem solta e o caminho de compatibilidade cobre.
+      const legacyClient = supabase as unknown as {
+        rpc: (
+          name: "correct_opening_cash_count",
+          args: Record<string, unknown>,
+        ) => PromiseLike<{ error: { code?: string; message: string } | null }>;
+      };
+      const { error } = await legacyClient.rpc("correct_opening_cash_count", {
         _shift_id: shiftId,
         _quantities: quantities,
         _reason: reason,
@@ -141,6 +149,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         });
       }
       if (error) throw error;
+      return { mode: "rpc" as const };
     },
     onSuccess: async () => {
       await Promise.all([
