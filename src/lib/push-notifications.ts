@@ -37,13 +37,13 @@ export function inspectPushSupport(): PushSupport {
 }
 
 /** A chave VAPID viaja em base64url e o PushManager exige bytes. */
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+function urlBase64ToUint8Array(base64: string): ArrayBuffer {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const normalized = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = window.atob(normalized);
   const output = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
-  return output;
+  return output.buffer as ArrayBuffer;
 }
 
 function encodeKey(subscription: PushSubscription, name: "p256dh" | "auth"): string {

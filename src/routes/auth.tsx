@@ -18,6 +18,7 @@ import {
 import { destinationForAccess, resolveAccessState } from "@/lib/access";
 import { friendlyError } from "@/lib/errors";
 import { ROLE_LABELS, type AppRole } from "@/lib/roles";
+import { listSignupUnits } from "@/lib/units.functions";
 
 const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
 
@@ -59,10 +60,7 @@ function AuthPage() {
 
   const { data: units } = useQuery({
     queryKey: ["units-public"],
-    queryFn: async () => {
-      const { data } = await supabase.from("units").select("id, name").order("name");
-      return data ?? [];
-    },
+    queryFn: () => listSignupUnits(),
   });
 
   useEffect(() => {
