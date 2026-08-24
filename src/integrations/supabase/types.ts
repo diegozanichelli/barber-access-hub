@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          created_at: string
+          id: string
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       cancelled_openings: {
         Row: {
           cancelled_by: string
@@ -245,6 +269,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       shifts: {
         Row: {
@@ -601,6 +658,7 @@ export type Database = {
         | "Renovação"
         | "Despesa"
         | "Sangria"
+        | "Upgrade"
       withdrawal_status: "pending" | "approved" | "disputed"
     }
     CompositeTypes: {
@@ -738,6 +796,7 @@ export const Constants = {
         "Renovação",
         "Despesa",
         "Sangria",
+        "Upgrade",
       ],
       withdrawal_status: ["pending", "approved", "disputed"],
     },
