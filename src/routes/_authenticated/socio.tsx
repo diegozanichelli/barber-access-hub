@@ -233,6 +233,21 @@ function PartnerDashboard() {
                     <p className="truncate text-xs text-muted-foreground">
                       {unit?.name ?? "Unidade"} · {new Date(w.created_at).toLocaleString("pt-BR")}
                     </p>
+                    {w.note ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        <strong>Observação:</strong> {w.note}
+                      </p>
+                    ) : null}
+                    {w.photo_url ? (
+                      <button
+                        type="button"
+                        className="mt-1 flex items-center gap-1 text-xs text-primary underline"
+                        onClick={() => void openReceipt(w.photo_url!)}
+                      >
+                        <ImageIcon className="size-3.5" />
+                        Ver comprovante de entrega
+                      </button>
+                    ) : null}
                   </div>
                   <span
                     className={`shrink-0 text-xs font-semibold ${
