@@ -511,6 +511,16 @@ export function ShiftPanel({ userId, unitId }: Props) {
                     {w.note ? ` · ${w.note}` : ""}
                   </p>
                 </div>
+                {w.photo_url ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label="Ver comprovante de entrega"
+                    onClick={() => void openReceipt(w.photo_url!)}
+                  >
+                    <ImageIcon className="size-4" />
+                  </Button>
+                ) : null}
                 <span
                   className={
                     w.status === "disputed"
@@ -661,6 +671,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
             open={withdrawalOpen}
             onOpenChange={setWithdrawalOpen}
             shiftId={openShift.id}
+            unitId={unitId}
             safeBalance={safeBalance}
           />
         </>
