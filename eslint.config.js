@@ -11,6 +11,10 @@ export default tseslint.config(
       "dist",
       ".output",
       ".vinxi",
+      // Lovable regenerates this client in the GitHub merge commit and injects
+      // a compact preview-auth storage adapter. It is generated code just like
+      // the database types and must not be reformatted by the app lint job.
+      "src/integrations/supabase/client.ts",
       "src/integrations/supabase/types.ts",
       // Supabase Edge Functions run on Deno and are synchronized/deployed
       // independently. The application lint config below targets browser and
