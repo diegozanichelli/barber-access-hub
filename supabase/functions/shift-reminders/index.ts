@@ -139,6 +139,99 @@ Deno.serve(async (request) => {
     }
   }
 
+  // Alerta único por divergência: turno contestado no repasse ou retirada de
+  // sócio contestada avisam o Auditor uma vez (dispute_notified_at marca o
+  // envio; sem ele, toda execução repetiria o alerta).
+  const sendToUserIds = async (userIds: string[], payload: string) => {
+    if (userIds.length === 0) return 0;
+    const { data: subscriptions } = await supabase
+      .from("push_subscriptions")
+      .select("id, user_id, endpoint, p256dh, auth")
+      .in("user_id", userIds);
+    let sent = 0;
+    for (const sub of (subscriptions ?? []) as Subscription[]) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload,
+        );
+        sent += 1;
+      } catch (error) {
+        const status = (error as { statusCode?: number }).statusCode;
+        if (status === 404 || status === 410) gone.push(sub.id);
+      }
+    }
+    return sent;
+  };
+
+  const { data: auditorRoles } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "auditor");
+  const auditorIds = (auditorRoles ?? []).map((row) => row.user_id as string);
+
+  let disputesNotified = 0;
+
+  if (auditorIds.length > 0) {
+    const { data: disputedShifts } = await supabase
+      .from("shifts")
+      .select("id, units ( name )")
+      .eq("status", "disputed")
+      .is("dispute_notified_at", null);
+    for (const shift of disputedShifts ?? []) {
+      const unitName =
+        (shift as { units?: { name: string } | null }).units?.name ?? "Unidade";
+      const sent = await sendToUserIds(
+        auditorIds,
+        JSON.stringify({
+          title: "Divergência no repasse",
+          body: `${unitName}: a contagem de recebimento não bateu com o fechamento. Abra o painel do Auditor para revisar.`,
+          tag: `dispute-shift-${shift.id}`,
+          url: "/auditor",
+        }),
+      );
+      if (sent > 0) {
+        disputesNotified += 1;
+        await supabase
+          .from("shifts")
+          .update({ dispute_notified_at: new Date().toISOString() })
+          .eq("id", shift.id)
+          .is("dispute_notified_at", null);
+      }
+    }
+
+    const { data: disputedWithdrawals } = await supabase
+      .from("partner_withdrawals")
+      .select("id, amount, units ( name )")
+      .eq("status", "disputed")
+      .is("dispute_notified_at", null);
+    for (const withdrawal of disputedWithdrawals ?? []) {
+      const unitName =
+        (withdrawal as { units?: { name: string } | null }).units?.name ?? "Unidade";
+      const amount = Number(withdrawal.amount).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      });
+      const sent = await sendToUserIds(
+        auditorIds,
+        JSON.stringify({
+          title: "Retirada contestada",
+          body: `${unitName}: o sócio contestou a retirada de ${amount}. Abra o painel do Auditor para revisar.`,
+          tag: `dispute-withdrawal-${withdrawal.id}`,
+          url: "/auditor",
+        }),
+      );
+      if (sent > 0) {
+        disputesNotified += 1;
+        await supabase
+          .from("partner_withdrawals")
+          .update({ dispute_notified_at: new Date().toISOString() })
+          .eq("id", withdrawal.id)
+          .is("dispute_notified_at", null);
+      }
+    }
+  }
+
   if (gone.length > 0) {
     await supabase.from("push_subscriptions").delete().in("id", gone);
   }
@@ -147,6 +240,7 @@ Deno.serve(async (request) => {
     stale: (stale ?? []).length,
     due: due.length,
     notified,
+    disputesNotified,
     removedSubscriptions: gone.length,
   });
 });

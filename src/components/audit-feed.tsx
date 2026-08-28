@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipt-thumb";
 import { BlindCalculator } from "@/components/blind-calculator";
+import { PeriodFilter, periodCutoff, type PeriodDays } from "@/components/period-filter";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
@@ -58,6 +59,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [category, setCategory] = useState<CategoryFilter>(ALL);
   const [paymentMethod, setPaymentMethod] = useState<PaymentFilter>(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
+  const [days, setDays] = useState<PeriodDays>("30");
   const [page, setPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
   const [reversalReason, setReversalReason] = useState("");
@@ -74,7 +76,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     openedAt: string;
   } | null>(null);
 
-  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order]);
+  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order, days]);
   useEffect(() => {
     if (selectedUnitId) setUnitId(selectedUnitId);
   }, [selectedUnitId]);
@@ -225,7 +227,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   });
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order],
+    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order, days],
     refetchInterval: 30_000,
     queryFn: async () => {
       let query = supabase
@@ -233,6 +235,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         .select("*", { count: "exact" })
         .order("created_at", { ascending: order === "asc" })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      const cutoff = periodCutoff(days);
+      if (cutoff) query = query.gte("created_at", cutoff);
       if (unitId !== ALL) query = query.eq("unit_id", unitId);
       if (type !== ALL) query = query.eq("transaction_type", type);
       if (category === "Upgrade") {
@@ -305,7 +309,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        <PeriodFilter value={days} onChange={setDays} />
         <Select value={unitId} onValueChange={setUnitId}>
           <SelectTrigger aria-label="Filtrar por unidade">
             <SelectValue placeholder="Unidade" />
