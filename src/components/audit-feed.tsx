@@ -37,6 +37,7 @@ import {
 
 const ALL = "__all__";
 const CATEGORIES = [
+  "Serviços",
   "Bebida",
   "Assinatura Nova",
   "Renovação",
