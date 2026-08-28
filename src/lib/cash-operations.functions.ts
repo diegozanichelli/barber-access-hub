@@ -64,19 +64,17 @@ function isMissingRpc(error: { code?: string; message: string } | null) {
 }
 
 async function expectedOpeningTotal(supabase: SupabaseClient<Database>, unitId: string) {
-  // The versioned RPC avoids accidentally trusting the first carry-over repair
-  // that only inspected deletions from the immediately preceding shift.
-  const { data, error } = await supabase.rpc("unit_expected_opening_total_v2", {
+  const { data, error } = await supabase.rpc("unit_expected_opening_total", {
     _unit_id: unitId,
   });
   if (!error) return Number(data ?? 0);
   if (!isMissingRpc(error)) throw error;
 
-  // Deployment-safe fallback: at least remove deleted rows from the latest
-  // shift immediately while the v2 migration is still being published.
+  // Compatibility for databases that have not received the carry-over repair
+  // yet. The migration makes master deletions visible here as adjustments.
   const { data: previous, error: previousError } = await supabase
     .from("shifts")
-    .select("id, actual_opening_total")
+    .select("closing_total")
     .eq("unit_id", unitId)
     .eq("status", "closed")
     .not("closing_total", "is", null)
@@ -84,15 +82,7 @@ async function expectedOpeningTotal(supabase: SupabaseClient<Database>, unitId: 
     .limit(1)
     .maybeSingle();
   if (previousError) throw previousError;
-  if (!previous) return 0;
-
-  const { data: transactions, error: transactionsError } = await supabase
-    .from("transactions")
-    .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
-    .eq("shift_id", previous.id);
-  if (transactionsError) throw transactionsError;
-
-  return computeExpectedClosing(previous.actual_opening_total, transactions ?? []);
+  return Number(previous?.closing_total ?? 0);
 }
 
 /**
