@@ -168,9 +168,11 @@ export type Database = {
           amount: number
           created_at: string
           created_by: string
+          dispute_notified_at: string | null
           id: string
           note: string | null
           partner_id: string
+          photo_url: string | null
           resolution_note: string | null
           resolved_at: string | null
           resolved_by: string | null
@@ -183,9 +185,11 @@ export type Database = {
           amount: number
           created_at?: string
           created_by: string
+          dispute_notified_at?: string | null
           id?: string
           note?: string | null
           partner_id: string
+          photo_url?: string | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -198,9 +202,11 @@ export type Database = {
           amount?: number
           created_at?: string
           created_by?: string
+          dispute_notified_at?: string | null
           id?: string
           note?: string | null
           partner_id?: string
+          photo_url?: string | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -310,6 +316,7 @@ export type Database = {
           closed_by: string | null
           closing_total: number | null
           created_at: string
+          dispute_notified_at: string | null
           expected_closing_total: number | null
           expected_opening_total: number
           id: string
@@ -328,6 +335,7 @@ export type Database = {
           closed_by?: string | null
           closing_total?: number | null
           created_at?: string
+          dispute_notified_at?: string | null
           expected_closing_total?: number | null
           expected_opening_total?: number
           id?: string
@@ -346,6 +354,7 @@ export type Database = {
           closed_by?: string | null
           closing_total?: number | null
           created_at?: string
+          dispute_notified_at?: string | null
           expected_closing_total?: number | null
           expected_opening_total?: number
           id?: string
@@ -549,15 +558,26 @@ export type Database = {
         Args: { _notes?: string; _quantities: Json; _shift_id: string }
         Returns: Json
       }
-      create_partner_withdrawal: {
-        Args: {
-          _amount: number
-          _note?: string
-          _partner_id: string
-          _shift_id: string
-        }
-        Returns: string
-      }
+      create_partner_withdrawal:
+        | {
+            Args: {
+              _amount: number
+              _note?: string
+              _partner_id: string
+              _shift_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              _amount: number
+              _note?: string
+              _partner_id: string
+              _photo_url?: string
+              _shift_id: string
+            }
+            Returns: string
+          }
       current_unit_id: { Args: never; Returns: string }
       decide_transaction_change_request: {
         Args: { _approve: boolean; _request_id: string }
