@@ -53,6 +53,10 @@ export const computeExpectedClosing = computeRunningCash;
  *
  * O cofre é acumulado por UNIDADE (não zera a cada turno): passe todos os
  * lançamentos e retiradas da unidade, não apenas os do turno aberto.
+ *
+ * ATENÇÃO: as telas usam a RPC `unit_safe_balance`, que é a fonte autoritativa.
+ * Esta função existe para cobrir a mesma regra em teste; ao mudar uma das duas,
+ * mude a outra, senão o teste continua verde sobre uma regra que não roda.
  */
 export function computeSafeBalance(
   transactions: CashTransaction[] = [],

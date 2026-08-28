@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.create_partner_withdrawal(uuid, uuid, numeric, text, text) FROM PUBLIC, anon;
