@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipt-thumb";
 import { BlindCalculator } from "@/components/blind-calculator";
+import { PeriodFilter, periodCutoff, type PeriodDays } from "@/components/period-filter";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
@@ -58,6 +59,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [category, setCategory] = useState<CategoryFilter>(ALL);
   const [paymentMethod, setPaymentMethod] = useState<PaymentFilter>(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
+  const [days, setDays] = useState<PeriodDays>("30");
   const [page, setPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
   const [reversalReason, setReversalReason] = useState("");
