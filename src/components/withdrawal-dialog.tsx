@@ -63,8 +63,8 @@ export function WithdrawalDialog({ open, onOpenChange, shiftId, unitId, safeBala
         _shift_id: shiftId,
         _partner_id: partnerId,
         _amount: value,
-        _note: note.trim() || null,
-        _photo_url: photoPath,
+        ...(note.trim() ? { _note: note.trim() } : {}),
+        ...(photoPath ? { _photo_url: photoPath } : {}),
       });
       if (error) throw error;
     },
