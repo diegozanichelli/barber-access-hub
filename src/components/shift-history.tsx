@@ -397,7 +397,8 @@ export function ShiftHistory() {
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
