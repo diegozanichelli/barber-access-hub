@@ -307,33 +307,75 @@ export function ShiftHistory() {
                         <span className="block text-xs text-muted-foreground">
                           {references.names[handoverCount.counted_by] ?? "Usuário"}
                         </span>
-                      ) : null}
-                    </td>
-                    <td
-                      className={`py-3 pr-3 font-semibold ${handoverBad ? "text-destructive" : "text-muted-foreground"}`}
-                    >
-                      {handoverDiff === null ? (
-                        "—"
-                      ) : (
-                        <>
-                          {handoverDiff > 0 ? "+" : ""}
-                          {formatBRL(handoverDiff)}
-                          {handoverBad ? (
-                            <span className="block text-xs">{differenceReason(handoverDiff)}</span>
-                          ) : null}
-                        </>
-                      )}
-                    </td>
-                    <td className="py-3">
-                      <Button size="sm" variant="ghost" onClick={() => setDetail(s)}>
-                        Ver contagem
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="py-3 pr-3">{formatBRL(s.expected_opening_total)}</td>
+                      <td className="py-3 pr-3">{formatBRL(s.actual_opening_total)}</td>
+                      <td
+                        className={`py-3 pr-3 font-semibold ${openingBad ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {diff > 0 ? "+" : ""}
+                        {formatBRL(diff)}
+                      </td>
+                      <td className="py-3 pr-3">
+                        {s.expected_closing_total === null
+                          ? "—"
+                          : formatBRL(s.expected_closing_total)}
+                      </td>
+                      <td className="py-3 pr-3">
+                        {s.closing_total === null ? "—" : formatBRL(s.closing_total)}
+                      </td>
+                      <td
+                        className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {shiftDiff === null ? (
+                          "—"
+                        ) : (
+                          <>
+                            {shiftDiff > 0 ? "+" : ""}
+                            {formatBRL(shiftDiff)}
+                            {shiftBad ? (
+                              <span className="block text-xs">
+                                {shiftDiff > 0 ? "Sobra" : "Falta"}
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </td>
+                      <td className="py-3 pr-3">
+                        {handoverCount ? formatBRL(handoverCount.total_calculated) : "—"}
+                        {handoverCount ? (
+                          <span className="block text-xs text-muted-foreground">
+                            {references.names[handoverCount.counted_by] ?? "Usuário"}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td
+                        className={`py-3 pr-3 font-semibold ${handoverBad ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {handoverDiff === null ? (
+                          "—"
+                        ) : (
+                          <>
+                            {handoverDiff > 0 ? "+" : ""}
+                            {formatBRL(handoverDiff)}
+                            {handoverBad ? (
+                              <span className="block text-xs">
+                                {differenceReason(handoverDiff)}
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        <Button size="sm" variant="ghost" onClick={() => setDetail(s)}>
+                          Ver contagem
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </>
       )}

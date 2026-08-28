@@ -6,7 +6,23 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi", "src/integrations/supabase/types.ts"] },
+  {
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      // Lovable regenerates this client in the GitHub merge commit and injects
+      // a compact preview-auth storage adapter. It is generated code just like
+      // the database types and must not be reformatted by the app lint job.
+      "src/integrations/supabase/client.ts",
+      "src/integrations/supabase/types.ts",
+      // Supabase Edge Functions run on Deno and are synchronized/deployed
+      // independently. The application lint config below targets browser and
+      // TanStack code, so applying it to those functions produces hundreds of
+      // false Prettier/browser-global failures in GitHub's merge build.
+      "supabase/functions/**",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
