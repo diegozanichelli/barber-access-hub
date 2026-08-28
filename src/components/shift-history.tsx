@@ -3,12 +3,67 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, ChevronRight, Clock3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { PeriodFilter, periodCutoff, type PeriodDays } from "@/components/period-filter";
 import { DENOMINATIONS, formatBRL } from "@/lib/cash";
 import { differenceReason } from "@/lib/divergences";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type CashCountRow, type ShiftRow } from "@/hooks/use-auditor-data";
 
 const PAGE_SIZE = 20;
+
+type ShiftView = {
+  shift: ShiftRow;
+  diff: number;
+  shiftDiff: number | null;
+  handoverDiff: number | null;
+  handoverCount: CashCountRow | undefined;
+  resolved: boolean;
+  hasDifference: boolean;
+  bad: boolean;
+  reason: string;
+};
+
+function buildShiftView(s: ShiftRow, pageCounts: CashCountRow[]): ShiftView {
+  const diff =
+    Math.round((Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100) / 100;
+  const hasClosing = s.expected_closing_total !== null && s.closing_total !== null;
+  const shiftDiff = hasClosing
+    ? Math.round((Number(s.closing_total) - Number(s.expected_closing_total)) * 100) / 100
+    : null;
+  const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
+  const openingBad = Math.abs(diff) >= 0.01;
+  const handoverCounts = pageCounts.filter(
+    (cashCount) => cashCount.shift_id === s.id && cashCount.count_type === "handover",
+  );
+  const handoverCount = handoverCounts[handoverCounts.length - 1];
+  const handoverDiff = handoverCount
+    ? Math.round((Number(handoverCount.total_calculated) - Number(s.closing_total ?? 0)) * 100) /
+      100
+    : null;
+  const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
+  // A diferença registrada nunca some — é o histórico do que foi contado.
+  // O que muda ao encerrar é o alarme: divergência tratada não segue vermelha.
+  const resolved = Boolean(s.resolved_at);
+  const hasDifference = openingBad || shiftBad || handoverBad || s.status === "disputed";
+  const bad = hasDifference && !resolved;
+  const reason = handoverBad
+    ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
+    : shiftBad
+      ? `${differenceReason(shiftDiff)} de ${formatBRL(Math.abs(shiftDiff!))} no fechamento`
+      : openingBad
+        ? `${differenceReason(diff)} de ${formatBRL(Math.abs(diff))} na abertura`
+        : s.status === "disputed"
+          ? "Sem diferença matemática — revisar status"
+          : "Sem divergência";
+  return { shift: s, diff, shiftDiff, handoverDiff, handoverCount, resolved, hasDifference, bad, reason };
+}
+
+function statusLabel(s: ShiftRow, resolved: boolean, hasDifference: boolean): string {
+  if (s.status === "open") return "Aberto";
+  if (s.status === "disputed") return "Com divergência";
+  if (resolved && hasDifference) return "Divergência encerrada";
+  return "Fechado";
+}
 const COUNT_LABELS: Record<string, string> = {
   opening: "Abertura",
   closing: "Fechamento",
