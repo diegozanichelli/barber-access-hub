@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, ImageIcon, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { useSessionProfile } from "@/hooks/use-session-profile";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
+import { getReceiptUrl } from "@/lib/transactions";
 import { requireDashboardRole } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/socio")({
@@ -76,6 +77,12 @@ function PartnerDashboard() {
       return data ?? [];
     },
   });
+
+  async function openReceipt(path: string) {
+    const url = await getReceiptUrl(path);
+    if (url) window.open(url, "_blank", "noopener");
+    else toast.error("Não foi possível abrir o comprovante");
+  }
 
   const mutation = useMutation({
     mutationFn: async (vars: { id: string; status: "approved" | "disputed" }) => {
