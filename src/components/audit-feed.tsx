@@ -76,7 +76,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     openedAt: string;
   } | null>(null);
 
-  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order]);
+  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order, days]);
   useEffect(() => {
     if (selectedUnitId) setUnitId(selectedUnitId);
   }, [selectedUnitId]);
@@ -227,7 +227,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   });
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order],
+    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order, days],
     refetchInterval: 30_000,
     queryFn: async () => {
       let query = supabase
@@ -235,6 +235,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         .select("*", { count: "exact" })
         .order("created_at", { ascending: order === "asc" })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      const cutoff = periodCutoff(days);
+      if (cutoff) query = query.gte("created_at", cutoff);
       if (unitId !== ALL) query = query.eq("unit_id", unitId);
       if (type !== ALL) query = query.eq("transaction_type", type);
       if (category === "Upgrade") {
