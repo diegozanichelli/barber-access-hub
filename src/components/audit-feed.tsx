@@ -309,7 +309,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        <PeriodFilter value={days} onChange={setDays} />
         <Select value={unitId} onValueChange={setUnitId}>
           <SelectTrigger aria-label="Filtrar por unidade">
             <SelectValue placeholder="Unidade" />
