@@ -604,6 +604,7 @@ export type Database = {
       }
       is_approved: { Args: { _user_id: string }; Returns: boolean }
       unit_expected_opening_total: { Args: { _unit_id: string }; Returns: number }
+      unit_expected_opening_total_v2: { Args: { _unit_id: string }; Returns: number }
       list_partners: {
         Args: never
         Returns: {
