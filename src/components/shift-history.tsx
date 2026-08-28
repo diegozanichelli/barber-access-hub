@@ -146,7 +146,16 @@ export function ShiftHistory() {
 
   return (
     <section className="surface-panel p-5">
-      <h2 className="text-lg">Histórico de turnos e divergências</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg">Histórico de turnos e divergências</h2>
+        <PeriodFilter
+          value={days}
+          onChange={(d) => {
+            setDays(d);
+            setPage(0);
+          }}
+        />
+      </div>
       <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
         <Clock3 className="size-4 text-primary" aria-hidden />
         <span>
@@ -162,9 +171,80 @@ export function ShiftHistory() {
       </p>
 
       {shifts.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">Nenhum turno registrado ainda.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Nenhum turno registrado no período selecionado.
+        </p>
       ) : (
-        <div className="mt-4 overflow-x-auto">
+        <>
+          {/* Cartões no celular — a tabela completa só cabe em telas largas. */}
+          <div className="mt-4 space-y-2 md:hidden">
+            {views.map((view) => {
+              const { shift: s, bad, hasDifference, resolved, reason } = view;
+              return (
+                <div
+                  key={s.id}
+                  className={`rounded-xl border p-3 ${
+                    bad ? "border-destructive/60 bg-destructive/10" : "border-border/60 bg-muted/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1 text-sm font-semibold">
+                      {bad ? (
+                        <AlertTriangle className="size-4 text-destructive" aria-hidden />
+                      ) : null}
+                      {references.unitNames[s.unit_id] ?? "Unidade"}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        s.status === "open"
+                          ? "bg-primary/15 text-primary"
+                          : s.status === "disputed"
+                            ? "bg-destructive/15 text-destructive"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {statusLabel(s, resolved, hasDifference)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Aberto em{" "}
+                    {new Date(s.opened_at).toLocaleString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                    {s.closed_at
+                      ? ` · Fechado em ${new Date(s.closed_at).toLocaleString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`
+                      : ""}
+                  </p>
+                  {hasDifference ? (
+                    <p
+                      className={`mt-1 text-xs font-semibold ${
+                        bad ? "text-destructive" : "text-muted-foreground"
+                      }`}
+                    >
+                      {reason}
+                    </p>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-2 h-9 w-full"
+                    onClick={() => setDetail(s)}
+                  >
+                    Ver detalhes
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
