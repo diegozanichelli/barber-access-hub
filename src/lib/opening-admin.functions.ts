@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { calculateTotal, formatBRL, type CashQuantities } from "@/lib/cash";
+import { calculateTotal, type CashQuantities } from "@/lib/cash";
 
 const quantity = z.number().int().min(0).max(1_000_000);
 const quantitiesSchema = z.object({
@@ -56,7 +56,7 @@ export const correctOpeningOnServer = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: shift, error: shiftError } = await supabaseAdmin
       .from("shifts")
-      .select("id, status, actual_opening_total, unit_id, opened_at")
+      .select("id, status, actual_opening_total")
       .eq("id", data.shiftId)
       .maybeSingle();
     if (shiftError) throw shiftError;
@@ -121,38 +121,7 @@ export const correctOpeningOnServer = createServerFn({ method: "POST" })
       throw new Error("A abertura mudou durante a correção. Atualize e tente novamente.");
     }
 
-    // Mesma regra da RPC correct_opening_cash_count (migration 20260821140000):
-    // encerra a divergência que originou esta abertura, que é a do turno da
-    // mesma unidade fechado imediatamente antes dela. As contagens registradas
-    // não são tocadas — são o histórico do que foi contado.
-    const { data: disputed, error: disputedError } = await supabaseAdmin
-      .from("shifts")
-      .select("id")
-      .eq("unit_id", shift.unit_id)
-      .eq("status", "disputed")
-      .lte("closed_at", shift.opened_at)
-      .order("closed_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (disputedError) throw disputedError;
-
-    let resolvedDispute = false;
-    if (disputed) {
-      const { error: resolveError } = await supabaseAdmin
-        .from("shifts")
-        .update({
-          status: "closed",
-          resolved_by: context.userId,
-          resolved_at: new Date().toISOString(),
-          resolution_note: `Abertura corrigida de ${formatBRL(count.total_calculated)} para ${formatBRL(total)} pelo master. Motivo: ${data.reason}`,
-        })
-        .eq("id", disputed.id)
-        .eq("status", "disputed");
-      if (resolveError) throw resolveError;
-      resolvedDispute = true;
-    }
-
-    return { total, resolvedDispute, mode: "compatibility" as const };
+    return { total, mode: "compatibility" as const };
   });
 
 /**

@@ -42,11 +42,7 @@ Novas contas de atendente, supervisor ou sócio ficam pendentes até a aprovaç�
 
 ### Variáveis de ambiente
 
-O projeto usa dois arquivos, e a separação entre eles é uma barreira de segurança.
-
-**`.env` — versionado.** O arquivo está rastreado pelo git, então só pode conter
-valores públicos. A chave publishable já é entregue no bundle do navegador, logo
-não há segredo a proteger aqui.
+Crie um arquivo `.env` sem versionar segredos:
 
 ```sh
 # Disponíveis no bundle do navegador
@@ -56,21 +52,10 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sua-chave-publicavel
 # Usadas pelo servidor TanStack Start
 SUPABASE_URL=https://seu-projeto.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sua-chave-publicavel
-```
-
-**`.env.local` — nunca versionado** (o `.gitignore` já o exclui via `*.local`).
-É o único lugar para segredos de servidor:
-
-```sh
 SUPABASE_SERVICE_ROLE_KEY=sua-chave-service-role
 ```
 
-A `SUPABASE_SERVICE_ROLE_KEY` **ignora todas as políticas de Row Level Security** —
-ou seja, contorna a barreira de acesso descrita em [Segurança](#segurança). Ela é
-exclusiva do servidor, nunca deve receber o prefixo `VITE_` (o que a publicaria no
-bundle do navegador) e **nunca deve ser colocada no `.env`**, que é versionado: um
-`git add -A` publicaria a chave no repositório. O Vite carrega `.env.local` com
-prioridade sobre `.env`, então basta defini-la lá.
+A `SUPABASE_SERVICE_ROLE_KEY` é exclusiva do servidor e nunca deve receber o prefixo `VITE_`.
 
 ### Instalação e execução
 
@@ -94,91 +79,6 @@ RLS e RPCs:
 supabase start
 supabase test db
 ```
-
-## Lembretes de fechamento de caixa
-
-Quando ninguém fecha o caixa, o turno segue aberto e os lançamentos do dia
-seguinte entram nele — a RLS aceita, porque o turno está `open`, e o índice
-único impede abrir outro. Os dois dias se misturam sem nenhum aviso.
-
-O sistema avisa em duas camadas:
-
-1. **Banner na tela do turno.** Não depende de configuração nenhuma. Aparece
-   para quem abrir o app com um caixa aberto além do limite.
-2. **Notificação no celular.** Cobre quem já foi embora. Exige a configuração
-   abaixo; sem ela, o recurso simplesmente não aparece e a camada 1 continua
-   funcionando.
-
-Os parâmetros ficam na tabela `app_settings` e podem ser mudados por SQL, sem
-deploy: `shift_reminder_after_hours` (padrão 10), `shift_reminder_repeat_hours`
-(padrão 4) e `shift_reminder_max_count` (padrão 3).
-
-### Configurar as notificações
-
-**1. Gere o par de chaves VAPID** (uma vez, e guarde a privada como segredo):
-
-```sh
-npx web-push generate-vapid-keys
-```
-
-**2. Publique a chave pública no bundle**, em `.env`:
-
-```sh
-VITE_VAPID_PUBLIC_KEY=sua-chave-publica
-```
-
-**3. Registre os segredos do servidor** — a chave privada **nunca** vai para o
-`.env` versionado nem recebe o prefixo `VITE_`:
-
-```sh
-supabase secrets set VAPID_PUBLIC_KEY=sua-chave-publica
-supabase secrets set VAPID_PRIVATE_KEY=sua-chave-privada
-supabase secrets set VAPID_SUBJECT=mailto:seu-email@dominio.com
-```
-
-**4. Publique a função:**
-
-```sh
-supabase functions deploy shift-reminders
-```
-
-**5. Agende a execução** com `pg_cron` e `pg_net`, no SQL editor. A função só
-aceita chamada autenticada com a service role, então ela não pode ser disparada
-de fora:
-
-```sql
-create extension if not exists pg_cron;
-create extension if not exists pg_net;
-
-select cron.schedule(
-  'shift-reminders',
-  '0 * * * *',
-  $$
-  select net.http_post(
-    url := 'https://SEU-PROJETO.supabase.co/functions/v1/shift-reminders',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.service_role_key')
-    )
-  );
-  $$
-);
-```
-
-Guarde a service role em `app.service_role_key` (via `ALTER DATABASE ... SET`)
-em vez de escrevê-la dentro do agendamento, que fica legível para quem consultar
-`cron.job`.
-
-### Limitações que valem saber
-
-- **No iPhone**, o push só existe se a pessoa adicionar o app à Tela de Início.
-  Enquanto isso não acontece, o app explica isso na tela em vez de oferecer um
-  botão que não funcionaria.
-- **Se a pessoa negar a permissão** ou desinstalar, o envio falha e a inscrição
-  morta é removida automaticamente no envio seguinte.
-- **Notificação de navegador não é garantia de entrega.** Para lembrete que
-  precisa chegar, WhatsApp ou SMS são canais mais confiáveis — ao custo de um
-  provedor e do cadastro dos telefones.
 
 ## Estrutura principal
 

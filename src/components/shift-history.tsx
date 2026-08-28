@@ -10,60 +10,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type CashCountRow, type ShiftRow } from "@/hooks/use-auditor-data";
 
 const PAGE_SIZE = 20;
-
-type ShiftView = {
-  shift: ShiftRow;
-  diff: number;
-  shiftDiff: number | null;
-  handoverDiff: number | null;
-  handoverCount: CashCountRow | undefined;
-  resolved: boolean;
-  hasDifference: boolean;
-  bad: boolean;
-  reason: string;
-};
-
-function buildShiftView(s: ShiftRow, pageCounts: CashCountRow[]): ShiftView {
-  const diff =
-    Math.round((Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100) / 100;
-  const hasClosing = s.expected_closing_total !== null && s.closing_total !== null;
-  const shiftDiff = hasClosing
-    ? Math.round((Number(s.closing_total) - Number(s.expected_closing_total)) * 100) / 100
-    : null;
-  const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
-  const openingBad = Math.abs(diff) >= 0.01;
-  const handoverCounts = pageCounts.filter(
-    (cashCount) => cashCount.shift_id === s.id && cashCount.count_type === "handover",
-  );
-  const handoverCount = handoverCounts[handoverCounts.length - 1];
-  const handoverDiff = handoverCount
-    ? Math.round((Number(handoverCount.total_calculated) - Number(s.closing_total ?? 0)) * 100) /
-      100
-    : null;
-  const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
-  // A diferença registrada nunca some — é o histórico do que foi contado.
-  // O que muda ao encerrar é o alarme: divergência tratada não segue vermelha.
-  const resolved = Boolean(s.resolved_at);
-  const hasDifference = openingBad || shiftBad || handoverBad || s.status === "disputed";
-  const bad = hasDifference && !resolved;
-  const reason = handoverBad
-    ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
-    : shiftBad
-      ? `${differenceReason(shiftDiff)} de ${formatBRL(Math.abs(shiftDiff!))} no fechamento`
-      : openingBad
-        ? `${differenceReason(diff)} de ${formatBRL(Math.abs(diff))} na abertura`
-        : s.status === "disputed"
-          ? "Sem diferença matemática — revisar status"
-          : "Sem divergência";
-  return { shift: s, diff, shiftDiff, handoverDiff, handoverCount, resolved, hasDifference, bad, reason };
-}
-
-function statusLabel(s: ShiftRow, resolved: boolean, hasDifference: boolean): string {
-  if (s.status === "open") return "Aberto";
-  if (s.status === "disputed") return "Com divergência";
-  if (resolved && hasDifference) return "Divergência encerrada";
-  return "Fechado";
-}
 const COUNT_LABELS: Record<string, string> = {
   opening: "Abertura",
   closing: "Fechamento",
@@ -74,22 +20,18 @@ export function ShiftHistory() {
   const { data: references } = useAuditorReferences();
   const [detail, setDetail] = useState<ShiftRow | null>(null);
   const [page, setPage] = useState(0);
-  const [days, setDays] = useState<PeriodDays>("30");
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-shift-history", page, days],
+    queryKey: ["audit-shift-history", page],
     refetchInterval: 30_000,
     queryFn: async () => {
-      let historyQuery = supabase
-        .from("shifts")
-        .select("*", { count: "exact" })
-        .in("status", ["open", "closed", "disputed"])
-        .order("opened_at", { ascending: false })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-      const cutoff = periodCutoff(days);
-      if (cutoff) historyQuery = historyQuery.gte("opened_at", cutoff);
       const [historyResult, openCountResult] = await Promise.all([
-        historyQuery,
+        supabase
+          .from("shifts")
+          .select("*", { count: "exact" })
+          .in("status", ["open", "closed", "disputed"])
+          .order("opened_at", { ascending: false })
+          .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1),
         supabase.from("shifts").select("id", { count: "exact", head: true }).eq("status", "open"),
       ]);
       if (historyResult.error) throw historyResult.error;
@@ -142,20 +84,10 @@ export function ShiftHistory() {
   const shifts = pageData?.rows ?? [];
   const count = pageData?.count ?? 0;
   const openCount = pageData?.openCount ?? 0;
-  const views = shifts.map((s) => buildShiftView(s, pageCounts));
 
   return (
     <section className="surface-panel p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg">Histórico de turnos e divergências</h2>
-        <PeriodFilter
-          value={days}
-          onChange={(d) => {
-            setDays(d);
-            setPage(0);
-          }}
-        />
-      </div>
+      <h2 className="text-lg">Histórico de turnos e divergências</h2>
       <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
         <Clock3 className="size-4 text-primary" aria-hidden />
         <span>
@@ -171,9 +103,7 @@ export function ShiftHistory() {
       </p>
 
       {shifts.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          Nenhum turno registrado no período selecionado.
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">Nenhum turno registrado ainda.</p>
       ) : (
         <>
           {/* Cartões no celular — a tabela completa só cabe em telas largas. */}
@@ -277,8 +207,26 @@ export function ShiftHistory() {
                   reason,
                 } = view;
                 const openingBad = Math.abs(diff) >= 0.01;
-                const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
+                const handoverCounts = pageCounts.filter(
+                  (cashCount) => cashCount.shift_id === s.id && cashCount.count_type === "handover",
+                );
+                const handoverCount = handoverCounts[handoverCounts.length - 1];
+                const handoverDiff = handoverCount
+                  ? Math.round(
+                      (Number(handoverCount.total_calculated) - Number(s.closing_total ?? 0)) * 100,
+                    ) / 100
+                  : null;
                 const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
+                const bad = openingBad || shiftBad || handoverBad || s.status === "disputed";
+                const reason = handoverBad
+                  ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
+                  : shiftBad
+                    ? `${differenceReason(shiftDiff)} de ${formatBRL(Math.abs(shiftDiff!))} no fechamento`
+                    : openingBad
+                      ? `${differenceReason(diff)} de ${formatBRL(Math.abs(diff))} na abertura`
+                      : s.status === "disputed"
+                        ? "Sem diferença matemática — revisar status"
+                        : "Sem divergência";
                 return (
                   <tr
                     key={s.id}
@@ -306,24 +254,13 @@ export function ShiftHistory() {
                           ? "Aberto"
                           : s.status === "disputed"
                             ? "Com divergência"
-                            : resolved && hasDifference
-                              ? "Divergência encerrada"
-                              : "Fechado"}
+                            : "Fechado"}
                       </span>
                     </td>
                     <td
                       className={`py-3 pr-3 text-xs font-semibold ${bad ? "text-destructive" : "text-muted-foreground"}`}
                     >
                       {reason}
-                      {resolved && hasDifference ? (
-                        <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                          Encerrada
-                          {s.resolved_at
-                            ? ` em ${new Date(s.resolved_at).toLocaleString("pt-BR")}`
-                            : ""}
-                          {s.resolution_note ? `: ${s.resolution_note}` : ""}
-                        </span>
-                      ) : null}
                     </td>
                     <td className="py-3 pr-3 text-muted-foreground">
                       {new Date(s.opened_at).toLocaleString("pt-BR")}

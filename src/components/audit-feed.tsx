@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipt-thumb";
 import { BlindCalculator } from "@/components/blind-calculator";
-import { PeriodFilter, periodCutoff, type PeriodDays } from "@/components/period-filter";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
@@ -59,7 +58,6 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [category, setCategory] = useState<CategoryFilter>(ALL);
   const [paymentMethod, setPaymentMethod] = useState<PaymentFilter>(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
-  const [days, setDays] = useState<PeriodDays>("30");
   const [page, setPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
   const [reversalReason, setReversalReason] = useState("");
@@ -76,7 +74,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     openedAt: string;
   } | null>(null);
 
-  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order, days]);
+  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order]);
   useEffect(() => {
     if (selectedUnitId) setUnitId(selectedUnitId);
   }, [selectedUnitId]);
@@ -131,28 +129,10 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       shiftId: string;
       quantities: CashQuantities;
       reason: string;
-    }) => {
-      // A RPC pode ainda não estar publicada neste projeto; o nome é passado
-      // por um cliente com tipagem solta e o caminho de compatibilidade cobre.
-      const legacyClient = supabase as unknown as {
-        rpc: (
-          name: "correct_opening_cash_count",
-          args: Record<string, unknown>,
-        ) => PromiseLike<{ error: { code?: string; message: string } | null }>;
-      };
-      const { error } = await legacyClient.rpc("correct_opening_cash_count", {
-        _shift_id: shiftId,
-        _quantities: quantities,
-        _reason: reason,
-      });
-      if (error?.code === "PGRST202" || error?.message.includes("schema cache")) {
-        return correctOpeningCompatibility({
-          data: { shiftId, quantities, reason },
-        });
-      }
-      if (error) throw error;
-      return { mode: "rpc" as const };
-    },
+    }) =>
+      correctOpeningCompatibility({
+        data: { shiftId, quantities, reason },
+      }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["audit-active-openings"] }),
@@ -160,8 +140,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         queryClient.invalidateQueries({ queryKey: ["audit-shift"] }),
       ]);
       toast.success("Abertura corrigida", {
-        description:
-          "O caixa foi recalculado e a divergência que originou esta abertura, se houver, foi encerrada com a justificativa registrada na auditoria.",
+        description: "O caixa foi recalculado e a alteração ficou registrada na auditoria.",
       });
       setOpeningToCorrect(null);
     },
@@ -227,7 +206,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   });
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order, days],
+    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order],
     refetchInterval: 30_000,
     queryFn: async () => {
       let query = supabase
@@ -235,8 +214,6 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         .select("*", { count: "exact" })
         .order("created_at", { ascending: order === "asc" })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-      const cutoff = periodCutoff(days);
-      if (cutoff) query = query.gte("created_at", cutoff);
       if (unitId !== ALL) query = query.eq("unit_id", unitId);
       if (type !== ALL) query = query.eq("transaction_type", type);
       if (category === "Upgrade") {
@@ -309,8 +286,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
-        <PeriodFilter value={days} onChange={setDays} />
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
         <Select value={unitId} onValueChange={setUnitId}>
           <SelectTrigger aria-label="Filtrar por unidade">
             <SelectValue placeholder="Unidade" />
@@ -395,11 +371,9 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                   {formatBRL(opening.actual_opening_total)}
                 </p>
               </div>
-              {/* Corrigir é reversível; excluir não é. Só a segunda fica vermelha,
-                  senão as duas se confundem e o clique errado apaga um turno. */}
               <Button
                 size="sm"
-                variant="secondary"
+                variant="destructive"
                 onClick={() =>
                   setOpeningToCorrect({
                     id: opening.id,

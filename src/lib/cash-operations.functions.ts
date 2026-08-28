@@ -1,7 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { calculateTotal, type CashQuantities } from "@/lib/cash";
+import type { Database } from "@/integrations/supabase/types";
+import { calculateTotal, countMatchesExpected, type CashQuantities } from "@/lib/cash";
+import { computeExpectedClosing } from "@/lib/running-cash";
 
 const quantity = z.number().int().min(0).max(1_000_000);
 const quantitiesSchema = z.object({
@@ -37,6 +40,20 @@ const receiveHandoverSchema = z.object({
   notes: z.string().trim().max(500),
 });
 
+const countCheckSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("opening"), unitId: z.string().uuid(), quantities: quantitiesSchema }),
+  z.object({
+    mode: z.literal("closing"),
+    shiftId: z.string().uuid(),
+    quantities: quantitiesSchema,
+  }),
+  z.object({
+    mode: z.literal("handover"),
+    pendingShiftId: z.string().uuid(),
+    quantities: quantitiesSchema,
+  }),
+]);
+
 type RpcResult = PromiseLike<{
   data: unknown;
   error: { code?: string; message: string } | null;
@@ -45,6 +62,105 @@ type RpcResult = PromiseLike<{
 function isMissingRpc(error: { code?: string; message: string } | null) {
   return error?.code === "PGRST202" || Boolean(error?.message.includes("schema cache"));
 }
+
+async function expectedOpeningTotal(supabase: SupabaseClient<Database>, unitId: string) {
+  const { data, error } = await supabase.rpc("unit_expected_opening_total", {
+    _unit_id: unitId,
+  });
+  if (!error) return Number(data ?? 0);
+  if (!isMissingRpc(error)) throw error;
+
+  // Compatibility for databases that have not received the carry-over repair
+  // yet. The migration makes master deletions visible here as adjustments.
+  const { data: previous, error: previousError } = await supabase
+    .from("shifts")
+    .select("closing_total")
+    .eq("unit_id", unitId)
+    .eq("status", "closed")
+    .not("closing_total", "is", null)
+    .order("closed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (previousError) throw previousError;
+  return Number(previous?.closing_total ?? 0);
+}
+
+/**
+ * Blind preflight: only says whether the count matches. Expected totals and
+ * differences deliberately stay on the authenticated server.
+ */
+export const checkCountDivergence = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => countCheckSchema.parse(data))
+  .handler(async ({ context, data }) => {
+    let expected: number;
+
+    if (data.mode === "opening") {
+      const { data: profile, error: profileError } = await context.supabase
+        .from("profiles")
+        .select("unit_id, status")
+        .eq("id", context.userId)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (profile?.status !== "approved" || profile.unit_id !== data.unitId) {
+        throw new Error("Você não tem permissão para conferir este caixa.");
+      }
+
+      expected = await expectedOpeningTotal(context.supabase, data.unitId);
+    } else if (data.mode === "closing") {
+      const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
+        await Promise.all([
+          context.supabase
+            .from("shifts")
+            .select("status, unit_id, actual_opening_total")
+            .eq("id", data.shiftId)
+            .maybeSingle(),
+          context.supabase
+            .from("transactions")
+            .select(
+              "transaction_type, payment_method, amount, reverses_transaction_id, reversed_at",
+            )
+            .eq("shift_id", data.shiftId),
+        ]);
+      if (shiftError) throw shiftError;
+      if (txError) throw txError;
+      if (!shift || shift.status !== "open") {
+        throw new Error("Este turno não está disponível para conferência.");
+      }
+      const { data: profile, error: profileError } = await context.supabase
+        .from("profiles")
+        .select("unit_id, status")
+        .eq("id", context.userId)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (profile?.status !== "approved" || profile.unit_id !== shift.unit_id) {
+        throw new Error("Você não tem permissão para conferir este caixa.");
+      }
+      expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
+    } else {
+      const { data: pending, error } = await context.supabase
+        .from("shifts")
+        .select("status, closing_total, unit_id")
+        .eq("id", data.pendingShiftId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!pending || pending.status !== "pending_handover") {
+        throw new Error("Este repasse não está mais disponível para conferência.");
+      }
+      const { data: profile, error: profileError } = await context.supabase
+        .from("profiles")
+        .select("unit_id, status")
+        .eq("id", context.userId)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (profile?.status !== "approved" || profile.unit_id !== pending.unit_id) {
+        throw new Error("Você não tem permissão para receber este caixa.");
+      }
+      expected = Number(pending.closing_total ?? 0);
+    }
+
+    return { matches: countMatchesExpected(data.quantities as CashQuantities, expected) };
+  });
 
 /** Compatibility path used only while the authoritative open_shift RPC is absent. */
 export const openShiftOnServer = createServerFn({ method: "POST" })
@@ -88,16 +204,7 @@ export const openShiftOnServer = createServerFn({ method: "POST" })
       throw new Error("Há um turno aguardando repasse. Receba o turno pendente.");
     }
 
-    const { data: previous, error: previousError } = await supabaseAdmin
-      .from("shifts")
-      .select("closing_total")
-      .eq("unit_id", data.unitId)
-      .eq("status", "closed")
-      .not("closing_total", "is", null)
-      .order("closed_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (previousError) throw previousError;
+    const expected = await expectedOpeningTotal(supabaseAdmin, data.unitId);
 
     const total = calculateTotal(data.quantities as CashQuantities);
     const { data: shift, error: shiftError } = await supabaseAdmin
@@ -105,7 +212,7 @@ export const openShiftOnServer = createServerFn({ method: "POST" })
       .insert({
         unit_id: data.unitId,
         opened_by: context.userId,
-        expected_opening_total: Number(previous?.closing_total ?? 0),
+        expected_opening_total: expected,
         actual_opening_total: total,
         status: "open",
       })
@@ -278,77 +385,4 @@ export const receiveHandoverOnServer = createServerFn({ method: "POST" })
       matches: result.matches ?? Math.abs(expected - total) < 0.005,
       mode: "legacy" as const,
     };
-  });
-
-const divergenceCheckSchema = z.discriminatedUnion("mode", [
-  z.object({ mode: z.literal("opening"), unitId: z.string().uuid(), quantities: quantitiesSchema }),
-  z.object({ mode: z.literal("closing"), shiftId: z.string().uuid(), quantities: quantitiesSchema }),
-  z.object({
-    mode: z.literal("handover"),
-    pendingShiftId: z.string().uuid(),
-    quantities: quantitiesSchema,
-  }),
-]);
-
-/**
- * Confere a contagem contra o valor teórico sem revelar o valor esperado:
- * devolve apenas se bate ou não, preservando a contagem cega.
- */
-export const checkCountDivergence = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => divergenceCheckSchema.parse(data))
-  .handler(async ({ context, data }): Promise<{ matches: boolean }> => {
-    const total = calculateTotal(data.quantities as CashQuantities);
-    let expected = 0;
-
-    if (data.mode === "opening") {
-      const { data: last } = await context.supabase
-        .from("shifts")
-        .select("closing_total")
-        .eq("unit_id", data.unitId)
-        .eq("status", "closed")
-        .not("closing_total", "is", null)
-        .order("closed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      expected = Number(last?.closing_total ?? 0);
-    } else if (data.mode === "handover") {
-      const { data: pending, error } = await context.supabase
-        .from("shifts")
-        .select("closing_total, status")
-        .eq("id", data.pendingShiftId)
-        .maybeSingle();
-      if (error) throw error;
-      if (!pending || pending.status !== "pending_handover") {
-        throw new Error("Este repasse já foi recebido. Atualize a tela.");
-      }
-      expected = Number(pending.closing_total ?? 0);
-    } else {
-      const { data: shift, error } = await context.supabase
-        .from("shifts")
-        .select("actual_opening_total, status")
-        .eq("id", data.shiftId)
-        .maybeSingle();
-      if (error) throw error;
-      if (!shift || shift.status !== "open") {
-        throw new Error("Este turno já foi fechado. Atualize a tela.");
-      }
-      const { data: rows, error: txError } = await context.supabase
-        .from("transactions")
-        .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
-        .eq("shift_id", data.shiftId);
-      if (txError) throw txError;
-      const movement = (rows ?? [])
-        .filter((row) => !row.reverses_transaction_id && !row.reversed_at)
-        .reduce((sum, row) => {
-          const amount = Number(row.amount ?? 0);
-          if (row.transaction_type === "income") {
-            return row.payment_method === "Dinheiro" ? sum + amount : sum;
-          }
-          return sum - amount;
-        }, 0);
-      expected = Number(shift.actual_opening_total ?? 0) + movement;
-    }
-
-    return { matches: Math.abs(Math.round((expected - total) * 100)) < 1 };
   });
