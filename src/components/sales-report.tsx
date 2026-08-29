@@ -101,6 +101,7 @@ export function SalesReport() {
       return total;
     },
     {
+      Serviços: { count: 0, amount: 0 },
       Bebida: { count: 0, amount: 0 },
       "Assinatura Nova": { count: 0, amount: 0 },
       Renovação: { count: 0, amount: 0 },
