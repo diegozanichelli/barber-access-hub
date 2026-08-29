@@ -666,6 +666,14 @@ export type Database = {
         Returns: string
       }
       shift_expected_cash: { Args: { _shift_id: string }; Returns: number }
+      unit_expected_opening_total: {
+        Args: { _unit_id: string }
+        Returns: number
+      }
+      unit_expected_opening_total_v2: {
+        Args: { _unit_id: string }
+        Returns: number
+      }
       unit_safe_balance: { Args: { _unit_id: string }; Returns: number }
     }
     Enums: {
