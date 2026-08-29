@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { formatBRL } from "@/lib/cash";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { differenceReason, explainShiftDivergence } from "@/lib/divergences";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
 /** O que está sendo encerrado: um turno em divergência ou uma retirada contestada. */
