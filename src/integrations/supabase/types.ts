@@ -679,6 +679,7 @@ export type Database = {
         | "Despesa"
         | "Sangria"
         | "Upgrade"
+        | "Serviços"
       withdrawal_status: "pending" | "approved" | "disputed"
     }
     CompositeTypes: {
@@ -817,6 +818,7 @@ export const Constants = {
         "Despesa",
         "Sangria",
         "Upgrade",
+        "Serviços",
       ],
       withdrawal_status: ["pending", "approved", "disputed"],
     },
