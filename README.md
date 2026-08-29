@@ -80,6 +80,55 @@ supabase start
 supabase test db
 ```
 
+## Banco de dados
+
+O deploy publica a interface, **não aplica as migrations**. Código que
+referencia schema ainda não aplicado falha só em produção, no clique do
+usuário — não no build nem na CI. Por isso as duas verificações abaixo valem
+sempre que uma migration nova entra na `main`.
+
+### Conferir quais migrations já foram aplicadas
+
+Com o projeto vinculado (`supabase link --project-ref <id>`):
+
+```sh
+supabase migration list
+```
+
+A saída mostra `Local` e `Remote` lado a lado — o que aparece só na coluna
+local ainda não rodou no banco. Aplicar:
+
+```sh
+supabase db push
+```
+
+Sem o CLI, dá para listar o que o banco tem pelo SQL editor e comparar com
+`ls supabase/migrations`:
+
+```sql
+select version, name
+from supabase_migrations.schema_migrations
+order by version desc
+limit 30;
+```
+
+### Regenerar os tipos do Supabase
+
+`src/integrations/supabase/types.ts` é **gerado**, e quando ele desanda o
+projeto inteiro perde a verificação de tipos: declarações duplicadas colapsam
+o tipo `Database` para `never`, todo `.from()` e `.rpc()` vira `any`, e erros
+reais passam despercebidos até quebrarem na tela do usuário. Já aconteceu.
+
+Depois de aplicar migrations, regenere:
+
+```sh
+supabase gen types typescript --linked > src/integrations/supabase/types.ts
+bun run typecheck
+```
+
+Não edite o arquivo à mão a não ser para destravar uma emergência — e, mesmo
+assim, regenere na sequência.
+
 ## Estrutura principal
 
 ```text

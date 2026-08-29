@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, ChevronRight, Clock3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { PeriodFilter, periodCutoff, type PeriodDays } from "@/components/period-filter";
 import { DENOMINATIONS, formatBRL } from "@/lib/cash";
 import { differenceReason } from "@/lib/divergences";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,16 +28,23 @@ export function ShiftHistory() {
   const { data: references } = useAuditorReferences();
   const [detail, setDetail] = useState<ShiftRow | null>(null);
   const [page, setPage] = useState(0);
+  // "all" por padrão para não esconder histórico de quem já usa a tela; quem
+  // quiser recortar escolhe o período.
+  const [period, setPeriod] = useState<PeriodDays>("all");
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-shift-history", page],
+    queryKey: ["audit-shift-history", page, period],
     refetchInterval: 30_000,
     queryFn: async () => {
+      const cutoff = periodCutoff(period);
+      let history = supabase
+        .from("shifts")
+        .select("*", { count: "exact" })
+        .in("status", ["open", "closed", "disputed"]);
+      if (cutoff) history = history.gte("opened_at", cutoff);
+
       const [historyResult, openCountResult] = await Promise.all([
-        supabase
-          .from("shifts")
-          .select("*", { count: "exact" })
-          .in("status", ["open", "closed", "disputed"])
+        history
           .order("opened_at", { ascending: false })
           .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1),
         supabase.from("shifts").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -153,7 +161,20 @@ export function ShiftHistory() {
 
   return (
     <section className="surface-panel p-5">
-      <h2 className="text-lg">Histórico de turnos e divergências</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg">Histórico de turnos e divergências</h2>
+        <div className="w-full sm:w-56">
+          <PeriodFilter
+            value={period}
+            onChange={(next) => {
+              setPeriod(next);
+              // A paginação é do recorte anterior; sem isto a página 3 de um
+              // filtro largo vira uma tela vazia num filtro estreito.
+              setPage(0);
+            }}
+          />
+        </div>
+      </div>
       <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
         <Clock3 className="size-4 text-primary" aria-hidden />
         <span>
