@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -171,9 +171,11 @@ export type Database = {
           amount: number
           created_at: string
           created_by: string
+          dispute_notified_at: string | null
           id: string
           note: string | null
           partner_id: string
+          photo_url: string | null
           resolution_note: string | null
           resolved_at: string | null
           resolved_by: string | null
@@ -186,9 +188,11 @@ export type Database = {
           amount: number
           created_at?: string
           created_by: string
+          dispute_notified_at?: string | null
           id?: string
           note?: string | null
           partner_id: string
+          photo_url?: string | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -201,9 +205,11 @@ export type Database = {
           amount?: number
           created_at?: string
           created_by?: string
+          dispute_notified_at?: string | null
           id?: string
           note?: string | null
           partner_id?: string
+          photo_url?: string | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -273,6 +279,39 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       shifts: {
         Row: {
           actual_opening_total: number
@@ -280,6 +319,7 @@ export type Database = {
           closed_by: string | null
           closing_total: number | null
           created_at: string
+          dispute_notified_at: string | null
           expected_closing_total: number | null
           expected_opening_total: number
           id: string
@@ -298,6 +338,7 @@ export type Database = {
           closed_by?: string | null
           closing_total?: number | null
           created_at?: string
+          dispute_notified_at?: string | null
           expected_closing_total?: number | null
           expected_opening_total?: number
           id?: string
@@ -316,6 +357,7 @@ export type Database = {
           closed_by?: string | null
           closing_total?: number | null
           created_at?: string
+          dispute_notified_at?: string | null
           expected_closing_total?: number | null
           expected_opening_total?: number
           id?: string
@@ -334,6 +376,62 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transaction_change_requests: {
+        Row: {
+          action: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: string
+          proposed_amount: number | null
+          proposed_description: string | null
+          reason: string
+          requested_by: string
+          status: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason: string
+          requested_by: string
+          status?: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason?: string
+          requested_by?: string
+          status?: string
+          transaction_id?: string
+          transaction_snapshot?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_change_requests_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -493,16 +591,10 @@ export type Database = {
         }
         Returns: Json
       }
-      create_partner_withdrawal: {
-        Args: {
-          _amount: number
-          _note?: string
-          _partner_id: string
-          _shift_id: string
-        }
-        Returns: string
+      delete_empty_open_shift: {
+        Args: { _reason: string; _shift_id: string }
+        Returns: undefined
       }
-      current_unit_id: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -527,15 +619,26 @@ export type Database = {
           _quantities: Json
           _unit_id: string
         }
+      }
+      master_delete_transaction: {
+        Args: { _reason: string; _transaction_id: string }
+        Returns: undefined
+      }
+      open_shift: {
+        Args: { _notes?: string; _quantities: Json; _unit_id: string }
         Returns: string
       }
       receive_handover: {
+        Args: { _notes?: string; _pending_shift_id: string; _quantities: Json }
+        Returns: Json
+      }
+      request_transaction_change: {
         Args: {
           _notes?: string
           _pending_shift_id: string
           _quantities: Json
         }
-        Returns: Json
+        Returns: string
       }
       resolve_shift_dispute: {
         Args: { _note: string; _shift_id: string }
@@ -552,9 +655,22 @@ export type Database = {
         Args: { _note: string; _withdrawal_id: string }
         Returns: undefined
       }
+      respond_partner_withdrawal: {
+        Args: { _decision: string; _withdrawal_id: string }
+        Returns: Database["public"]["Enums"]["withdrawal_status"]
+      }
       reverse_transaction: {
         Args: { _reason: string; _transaction_id: string }
         Returns: string
+      }
+      shift_expected_cash: { Args: { _shift_id: string }; Returns: number }
+      unit_expected_opening_total: {
+        Args: { _unit_id: string }
+        Returns: number
+      }
+      unit_expected_opening_total_v2: {
+        Args: { _unit_id: string }
+        Returns: number
       }
       unit_safe_balance: { Args: { _unit_id: string }; Returns: number }
     }
@@ -569,6 +685,8 @@ export type Database = {
         | "Upgrade"
         | "Despesa"
         | "Sangria"
+        | "Upgrade"
+        | "Serviços"
       withdrawal_status: "pending" | "approved" | "disputed"
     }
     CompositeTypes: {
@@ -707,6 +825,8 @@ export const Constants = {
         "Upgrade",
         "Despesa",
         "Sangria",
+        "Upgrade",
+        "Serviços",
       ],
       withdrawal_status: ["pending", "approved", "disputed"],
     },

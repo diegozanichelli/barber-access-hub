@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, ChevronRight, Clock3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { PeriodFilter, periodCutoff, type PeriodDays } from "@/components/period-filter";
 import { DENOMINATIONS, formatBRL } from "@/lib/cash";
 import { differenceReason } from "@/lib/divergences";
 import { supabase } from "@/integrations/supabase/client";
@@ -216,16 +217,91 @@ export function ShiftHistory() {
                     <td
                       className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
                     >
-                      {shiftDiff === null ? (
-                        "—"
-                      ) : (
-                        <>
-                          {shiftDiff > 0 ? "+" : ""}
-                          {formatBRL(shiftDiff)}
-                          {shiftBad ? (
-                            <span className="block text-xs">
-                              {shiftDiff > 0 ? "Sobra" : "Falta"}
-                            </span>
+                      {statusLabel(s, resolved, hasDifference)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Aberto em{" "}
+                    {new Date(s.opened_at).toLocaleString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                    {s.closed_at
+                      ? ` · Fechado em ${new Date(s.closed_at).toLocaleString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`
+                      : ""}
+                  </p>
+                  {hasDifference ? (
+                    <p
+                      className={`mt-1 text-xs font-semibold ${
+                        bad ? "text-destructive" : "text-muted-foreground"
+                      }`}
+                    >
+                      {reason}
+                    </p>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-2 h-9 w-full"
+                    onClick={() => setDetail(s)}
+                  >
+                    Ver detalhes
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 hidden overflow-x-auto md:block">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3">Unidade</th>
+                  <th className="py-2 pr-3">Situação</th>
+                  <th className="py-2 pr-3">Onde está a diferença?</th>
+                  <th className="py-2 pr-3">Abertura</th>
+                  <th className="py-2 pr-3">Esperado (abertura)</th>
+                  <th className="py-2 pr-3">Contado (abertura)</th>
+                  <th className="py-2 pr-3">Diferença abertura</th>
+                  <th className="py-2 pr-3">Esperado no Fechamento</th>
+                  <th className="py-2 pr-3">Entregue no fechamento</th>
+                  <th className="py-2 pr-3">Diferença do Turno</th>
+                  <th className="py-2 pr-3">Contado no recebimento</th>
+                  <th className="py-2 pr-3">Diferença do repasse</th>
+                  <th className="py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {views.map((view) => {
+                  const {
+                    shift: s,
+                    diff,
+                    shiftDiff,
+                    handoverDiff,
+                    handoverCount,
+                    resolved,
+                    hasDifference,
+                    bad,
+                    reason,
+                    openingBad,
+                    shiftBad,
+                    handoverBad,
+                  } = view;
+                  return (
+                    <tr
+                      key={s.id}
+                      className={`border-t border-border/60 ${bad ? "bg-destructive/10" : ""}`}
+                    >
+                      <td className="py-3 pr-3">
+                        <span className="flex items-center gap-1">
+                          {bad ? (
+                            <AlertTriangle className="size-4 text-destructive" aria-hidden />
                           ) : null}
                         </>
                       )}

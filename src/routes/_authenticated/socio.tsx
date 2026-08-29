@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, ImageIcon, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ function PartnerDashboard() {
   const { data: profile, isLoading } = useSessionProfile();
   const queryClient = useQueryClient();
   const [disputeId, setDisputeId] = useState<string | null>(null);
+  const [approveId, setApproveId] = useState<string | null>(null);
 
   const { data: history, isLoading: loadingHistory } = useQuery({
     queryKey: ["partner-withdrawal-history", profile?.userId],
@@ -75,6 +76,12 @@ function PartnerDashboard() {
       return data ?? [];
     },
   });
+
+  async function openReceipt(path: string) {
+    const url = await getReceiptUrl(path);
+    if (url) window.open(url, "_blank", "noopener");
+    else toast.error("Não foi possível abrir o comprovante");
+  }
 
   const mutation = useMutation({
     mutationFn: async (vars: { id: string; status: "approved" | "disputed" }) => {
@@ -134,14 +141,37 @@ function PartnerDashboard() {
                     Registrada por {author?.full_name || "Atendente"} ·{" "}
                     {new Date(w.created_at).toLocaleString("pt-BR")}
                   </p>
+                  {w.note ? (
+                    <p className="mt-2 rounded-md border border-border/60 bg-muted/50 p-2 text-xs text-muted-foreground">
+                      <strong>Observação:</strong> {w.note}
+                    </p>
+                  ) : null}
+                  {w.photo_url ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-2"
+                      onClick={() => void openReceipt(w.photo_url!)}
+                    >
+                      <ImageIcon className="size-4" />
+                      Ver comprovante de entrega
+                    </Button>
+                  ) : null}
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     <Button
                       className="h-12"
                       disabled={mutation.isPending}
-                      onClick={() => mutation.mutate({ id: w.id, status: "approved" })}
+                      onClick={() => {
+                        if (approveId !== w.id) {
+                          setApproveId(w.id);
+                          return;
+                        }
+                        setApproveId(null);
+                        mutation.mutate({ id: w.id, status: "approved" });
+                      }}
                     >
                       <Check className="size-4" />
-                      Confirmar
+                      {approveId === w.id ? `Confirmar ${formatBRL(w.amount)}` : "Confirmar"}
                     </Button>
                     <Button
                       variant="destructive"
@@ -202,6 +232,21 @@ function PartnerDashboard() {
                     <p className="truncate text-xs text-muted-foreground">
                       {unit?.name ?? "Unidade"} · {new Date(w.created_at).toLocaleString("pt-BR")}
                     </p>
+                    {w.note ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        <strong>Observação:</strong> {w.note}
+                      </p>
+                    ) : null}
+                    {w.photo_url ? (
+                      <button
+                        type="button"
+                        className="mt-1 flex items-center gap-1 text-xs text-primary underline"
+                        onClick={() => void openReceipt(w.photo_url!)}
+                      >
+                        <ImageIcon className="size-3.5" />
+                        Ver comprovante de entrega
+                      </button>
+                    ) : null}
                   </div>
                   <span
                     className={`shrink-0 text-xs font-semibold ${

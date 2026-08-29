@@ -1,0 +1,2 @@
+ALTER TABLE public.cash_counts DROP CONSTRAINT cash_counts_count_type_check;
+ALTER TABLE public.cash_counts ADD CONSTRAINT cash_counts_count_type_check CHECK (count_type = ANY (ARRAY['opening'::text, 'closing'::text, 'handover'::text]));
