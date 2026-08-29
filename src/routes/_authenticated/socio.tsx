@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useSessionProfile } from "@/hooks/use-session-profile";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
+import { getReceiptUrl } from "@/lib/transactions";
 import { friendlyError } from "@/lib/errors";
 import { requireDashboardRole } from "@/lib/route-guards";
 
