@@ -26,6 +26,69 @@ export type Database = {
         Update: { id?: string; shift_id?: string; sent_at?: string; recipients?: number }
         Relationships: []
       }
+      cash_count_corrections: {
+        Row: {
+          id: string
+          shift_id: string
+          cash_count_id: string
+          corrected_by: string
+          previous_total: number
+          corrected_total: number
+          previous_quantities: Json
+          corrected_quantities: Json
+          reason: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          shift_id: string
+          cash_count_id: string
+          corrected_by: string
+          previous_total: number
+          corrected_total: number
+          previous_quantities: Json
+          corrected_quantities: Json
+          reason: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          shift_id?: string
+          cash_count_id?: string
+          corrected_by?: string
+          previous_total?: number
+          corrected_total?: number
+          previous_quantities?: Json
+          corrected_quantities?: Json
+          reason?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      deleted_transactions: {
+        Row: {
+          id: string
+          transaction_snapshot: Json
+          deleted_by: string
+          reason: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          transaction_snapshot: Json
+          deleted_by: string
+          reason: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          transaction_snapshot?: Json
+          deleted_by?: string
+          reason?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       cancelled_openings: {
         Row: {
           cancelled_by: string
