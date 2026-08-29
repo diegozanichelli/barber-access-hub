@@ -119,15 +119,26 @@ projeto inteiro perde a verificação de tipos: declarações duplicadas colapsa
 o tipo `Database` para `never`, todo `.from()` e `.rpc()` vira `any`, e erros
 reais passam despercebidos até quebrarem na tela do usuário. Já aconteceu.
 
-Depois de aplicar migrations, regenere:
+No fluxo Lovable, o arquivo é **regenerado automaticamente pela plataforma
+após cada migration aplicada** — não edite à mão. No fluxo local com Supabase
+CLI, depois de aplicar migrations, regenere:
 
 ```sh
 supabase gen types typescript --linked > src/integrations/supabase/types.ts
 bun run typecheck
 ```
 
-Não edite o arquivo à mão a não ser para destravar uma emergência — e, mesmo
-assim, regenere na sequência.
+### Branch protection na `main`
+
+A CI só protege o repositório se for **exigida** nas configurações do GitHub —
+sem isso, um merge direto na `main` pode desfazer correções que já passaram
+por PR. No GitHub: **Settings → Branches → Add branch ruleset** para `main`,
+marcando:
+
+- Require a pull request before merging
+- Require status checks to pass → check `Lint, typecheck, test e build`
+- Require branches to be up to date before merging
+- Block force pushes
 
 ## Estrutura principal
 
