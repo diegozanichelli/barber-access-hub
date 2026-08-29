@@ -1,8 +1,22 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { friendlyError } from "@/lib/errors";
 import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatBRL } from "@/lib/cash";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { differenceReason, explainShiftDivergence } from "@/lib/divergences";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
 /** O que está sendo encerrado: um turno em divergência ou uma retirada contestada. */

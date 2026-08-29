@@ -16,20 +16,31 @@ const COUNT_LABELS: Record<string, string> = {
   handover: "Recebimento do repasse",
 };
 
+function statusLabel(shift: ShiftRow, resolved: boolean, hasDifference: boolean): string {
+  if (shift.status === "open") return "Aberto";
+  if (shift.status === "disputed") return resolved ? "Divergência encerrada" : "Com divergência";
+  return hasDifference ? "Fechado com diferença" : "Fechado";
+}
+
 export function ShiftHistory() {
   const { data: references } = useAuditorReferences();
   const [detail, setDetail] = useState<ShiftRow | null>(null);
   const [page, setPage] = useState(0);
+  const [period, setPeriod] = useState<PeriodDays>("30");
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-shift-history", page],
+    queryKey: ["audit-shift-history", page, period],
     refetchInterval: 30_000,
     queryFn: async () => {
+      const cutoff = periodCutoff(period);
+      let historyQuery = supabase
+        .from("shifts")
+        .select("*", { count: "exact" })
+        .in("status", ["open", "closed", "disputed"]);
+      if (cutoff) historyQuery = historyQuery.gte("opened_at", cutoff);
+
       const [historyResult, openCountResult] = await Promise.all([
-        supabase
-          .from("shifts")
-          .select("*", { count: "exact" })
-          .in("status", ["open", "closed", "disputed"])
+        historyQuery
           .order("opened_at", { ascending: false })
           .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1),
         supabase.from("shifts").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -85,9 +96,66 @@ export function ShiftHistory() {
   const count = pageData?.count ?? 0;
   const openCount = pageData?.openCount ?? 0;
 
+  const views = shifts.map((s) => {
+    const diff =
+      Math.round((Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100) / 100;
+    const hasClosing = s.expected_closing_total !== null && s.closing_total !== null;
+    const shiftDiff = hasClosing
+      ? Math.round((Number(s.closing_total) - Number(s.expected_closing_total)) * 100) / 100
+      : null;
+    const handoverCounts = pageCounts.filter(
+      (cashCount) => cashCount.shift_id === s.id && cashCount.count_type === "handover",
+    );
+    const handoverCount = handoverCounts[handoverCounts.length - 1];
+    const handoverDiff = handoverCount
+      ? Math.round((Number(handoverCount.total_calculated) - Number(s.closing_total ?? 0)) * 100) /
+        100
+      : null;
+    const openingBad = Math.abs(diff) >= 0.01;
+    const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
+    const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
+    const resolved = Boolean(s.resolved_at);
+    const hasDifference = openingBad || shiftBad || handoverBad || s.status === "disputed";
+    const bad = hasDifference && !resolved;
+    const reason = handoverBad
+      ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
+      : shiftBad
+        ? `${differenceReason(shiftDiff)} de ${formatBRL(Math.abs(shiftDiff!))} no fechamento`
+        : openingBad
+          ? `${differenceReason(diff)} de ${formatBRL(Math.abs(diff))} na abertura`
+          : s.status === "disputed"
+            ? "Sem diferença matemática — revisar status"
+            : "Sem divergência";
+    return {
+      shift: s,
+      diff,
+      shiftDiff,
+      handoverDiff,
+      handoverCount,
+      resolved,
+      hasDifference,
+      bad,
+      reason,
+      openingBad,
+      shiftBad,
+      handoverBad,
+    };
+  });
+
   return (
     <section className="surface-panel p-5">
-      <h2 className="text-lg">Histórico de turnos e divergências</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg">Histórico de turnos e divergências</h2>
+        <div className="w-44">
+          <PeriodFilter
+            value={period}
+            onChange={(value) => {
+              setPeriod(value);
+              setPage(0);
+            }}
+          />
+        </div>
+      </div>
       <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
         <Clock3 className="size-4 text-primary" aria-hidden />
         <span>
@@ -102,121 +170,28 @@ export function ShiftHistory() {
         divergência no recebimento.
       </p>
 
-      {shifts.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">Nenhum turno registrado ainda.</p>
+      {views.length === 0 ? (
+        <p className="mt-2 text-sm text-muted-foreground">Nenhum turno registrado no período.</p>
       ) : (
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="py-2 pr-3">Unidade</th>
-                <th className="py-2 pr-3">Situação</th>
-                <th className="py-2 pr-3">Onde está a diferença?</th>
-                <th className="py-2 pr-3">Abertura</th>
-                <th className="py-2 pr-3">Esperado (abertura)</th>
-                <th className="py-2 pr-3">Contado (abertura)</th>
-                <th className="py-2 pr-3">Diferença abertura</th>
-                <th className="py-2 pr-3">Esperado no Fechamento</th>
-                <th className="py-2 pr-3">Entregue no fechamento</th>
-                <th className="py-2 pr-3">Diferença do Turno</th>
-                <th className="py-2 pr-3">Contado no recebimento</th>
-                <th className="py-2 pr-3">Diferença do repasse</th>
-                <th className="py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {shifts.map((s) => {
-                const diff =
-                  Math.round(
-                    (Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100,
-                  ) / 100;
-                const hasClosing = s.expected_closing_total !== null && s.closing_total !== null;
-                const shiftDiff = hasClosing
-                  ? Math.round((Number(s.closing_total) - Number(s.expected_closing_total)) * 100) /
-                    100
-                  : null;
-                const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
-                const openingBad = Math.abs(diff) >= 0.01;
-                const handoverCounts = pageCounts.filter(
-                  (cashCount) => cashCount.shift_id === s.id && cashCount.count_type === "handover",
-                );
-                const handoverCount = handoverCounts[handoverCounts.length - 1];
-                const handoverDiff = handoverCount
-                  ? Math.round(
-                      (Number(handoverCount.total_calculated) - Number(s.closing_total ?? 0)) * 100,
-                    ) / 100
-                  : null;
-                const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
-                const bad = openingBad || shiftBad || handoverBad || s.status === "disputed";
-                const reason = handoverBad
-                  ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
-                  : shiftBad
-                    ? `${differenceReason(shiftDiff)} de ${formatBRL(Math.abs(shiftDiff!))} no fechamento`
-                    : openingBad
-                      ? `${differenceReason(diff)} de ${formatBRL(Math.abs(diff))} na abertura`
-                      : s.status === "disputed"
-                        ? "Sem diferença matemática — revisar status"
-                        : "Sem divergência";
-                return (
-                  <tr
-                    key={s.id}
-                    className={`border-t border-border/60 ${bad ? "bg-destructive/10" : ""}`}
-                  >
-                    <td className="py-3 pr-3">
-                      <span className="flex items-center gap-1">
-                        {bad ? (
-                          <AlertTriangle className="size-4 text-destructive" aria-hidden />
-                        ) : null}
-                        {references.unitNames[s.unit_id] ?? "Unidade"}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                          s.status === "open"
-                            ? "bg-primary/15 text-primary"
-                            : s.status === "disputed"
-                              ? "bg-destructive/15 text-destructive"
-                              : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {s.status === "open"
-                          ? "Aberto"
-                          : s.status === "disputed"
-                            ? "Com divergência"
-                            : "Fechado"}
-                      </span>
-                    </td>
-                    <td
-                      className={`py-3 pr-3 text-xs font-semibold ${bad ? "text-destructive" : "text-muted-foreground"}`}
-                    >
-                      {reason}
-                    </td>
-                    <td className="py-3 pr-3 text-muted-foreground">
-                      {new Date(s.opened_at).toLocaleString("pt-BR")}
-                      <span className="block text-xs">
-                        {references.names[s.opened_by] ?? "Usuário"}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-3">{formatBRL(s.expected_opening_total)}</td>
-                    <td className="py-3 pr-3">{formatBRL(s.actual_opening_total)}</td>
-                    <td
-                      className={`py-3 pr-3 font-semibold ${openingBad ? "text-destructive" : "text-muted-foreground"}`}
-                    >
-                      {diff > 0 ? "+" : ""}
-                      {formatBRL(diff)}
-                    </td>
-                    <td className="py-3 pr-3">
-                      {s.expected_closing_total === null
-                        ? "—"
-                        : formatBRL(s.expected_closing_total)}
-                    </td>
-                    <td className="py-3 pr-3">
-                      {s.closing_total === null ? "—" : formatBRL(s.closing_total)}
-                    </td>
-                    <td
-                      className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
-                    >
+        <>
+          <div className="mt-4 space-y-3 md:hidden">
+            {views.map((view) => {
+              const { shift: s, resolved, hasDifference, bad, reason } = view;
+              return (
+                <div
+                  key={s.id}
+                  className={`rounded-lg border p-3 ${
+                    bad ? "border-destructive/40 bg-destructive/10" : "border-border/60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1 text-sm font-semibold">
+                      {bad ? (
+                        <AlertTriangle className="size-4 text-destructive" aria-hidden />
+                      ) : null}
+                      {references.unitNames[s.unit_id] ?? "Unidade"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
                       {statusLabel(s, resolved, hasDifference)}
                     </span>
                   </div>
@@ -258,6 +233,7 @@ export function ShiftHistory() {
               );
             })}
           </div>
+
           <div className="mt-4 hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -303,43 +279,101 @@ export function ShiftHistory() {
                           {bad ? (
                             <AlertTriangle className="size-4 text-destructive" aria-hidden />
                           ) : null}
-                        </>
-                      )}
-                    </td>
-                    <td className="py-3 pr-3">
-                      {handoverCount ? formatBRL(handoverCount.total_calculated) : "—"}
-                      {handoverCount ? (
-                        <span className="block text-xs text-muted-foreground">
-                          {references.names[handoverCount.counted_by] ?? "Usuário"}
+                          {references.unitNames[s.unit_id] ?? "Unidade"}
                         </span>
-                      ) : null}
-                    </td>
-                    <td
-                      className={`py-3 pr-3 font-semibold ${handoverBad ? "text-destructive" : "text-muted-foreground"}`}
-                    >
-                      {handoverDiff === null ? (
-                        "—"
-                      ) : (
-                        <>
-                          {handoverDiff > 0 ? "+" : ""}
-                          {formatBRL(handoverDiff)}
-                          {handoverBad ? (
-                            <span className="block text-xs">{differenceReason(handoverDiff)}</span>
-                          ) : null}
-                        </>
-                      )}
-                    </td>
-                    <td className="py-3">
-                      <Button size="sm" variant="ghost" onClick={() => setDetail(s)}>
-                        Ver contagem
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                            s.status === "open"
+                              ? "bg-primary/15 text-primary"
+                              : s.status === "disputed" && !resolved
+                                ? "bg-destructive/15 text-destructive"
+                                : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {statusLabel(s, resolved, hasDifference)}
+                        </span>
+                      </td>
+                      <td
+                        className={`py-3 pr-3 text-xs font-semibold ${bad ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {reason}
+                      </td>
+                      <td className="py-3 pr-3 text-muted-foreground">
+                        {new Date(s.opened_at).toLocaleString("pt-BR")}
+                        <span className="block text-xs">
+                          {references.names[s.opened_by] ?? "Usuário"}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3">{formatBRL(s.expected_opening_total)}</td>
+                      <td className="py-3 pr-3">{formatBRL(s.actual_opening_total)}</td>
+                      <td
+                        className={`py-3 pr-3 font-semibold ${openingBad ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {diff > 0 ? "+" : ""}
+                        {formatBRL(diff)}
+                      </td>
+                      <td className="py-3 pr-3">
+                        {s.expected_closing_total === null
+                          ? "—"
+                          : formatBRL(s.expected_closing_total)}
+                      </td>
+                      <td className="py-3 pr-3">
+                        {s.closing_total === null ? "—" : formatBRL(s.closing_total)}
+                      </td>
+                      <td
+                        className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {shiftDiff === null ? (
+                          "—"
+                        ) : (
+                          <>
+                            {shiftDiff > 0 ? "+" : ""}
+                            {formatBRL(shiftDiff)}
+                            {shiftBad ? (
+                              <span className="block text-xs">{differenceReason(shiftDiff)}</span>
+                            ) : null}
+                          </>
+                        )}
+                      </td>
+                      <td className="py-3 pr-3">
+                        {handoverCount ? formatBRL(handoverCount.total_calculated) : "—"}
+                        {handoverCount ? (
+                          <span className="block text-xs text-muted-foreground">
+                            {references.names[handoverCount.counted_by] ?? "Usuário"}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td
+                        className={`py-3 pr-3 font-semibold ${handoverBad ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {handoverDiff === null ? (
+                          "—"
+                        ) : (
+                          <>
+                            {handoverDiff > 0 ? "+" : ""}
+                            {formatBRL(handoverDiff)}
+                            {handoverBad ? (
+                              <span className="block text-xs">
+                                {differenceReason(handoverDiff)}
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        <Button size="sm" variant="ghost" onClick={() => setDetail(s)}>
+                          Ver contagem
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">

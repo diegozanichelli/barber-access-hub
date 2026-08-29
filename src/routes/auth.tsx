@@ -18,6 +18,7 @@ import {
 import { destinationForAccess, resolveAccessState } from "@/lib/access";
 import { friendlyError } from "@/lib/errors";
 import { ROLE_LABELS, roleRequiresUnit, type AppRole } from "@/lib/roles";
+import { listSignupUnits } from "@/lib/units.functions";
 
 const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
 

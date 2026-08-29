@@ -51,8 +51,8 @@ export function TransactionChangeRequestDialog({
         _transaction_id: transactionId,
         _action: action,
         _reason: reason.trim(),
-        _proposed_amount: proposed,
-        _proposed_description: description.trim() || null,
+        ...(proposed !== null ? { _proposed_amount: proposed } : {}),
+        ...(description.trim() ? { _proposed_description: description.trim() } : {}),
       });
       if (error) throw error;
     },
