@@ -19,7 +19,7 @@ import {
   resetUserPassword,
   updateManagedUser,
 } from "@/lib/admin-users.functions";
-import { ROLE_LABELS, ROLE_ORDER, type AppRole } from "@/lib/roles";
+import { ROLE_LABELS, ROLE_ORDER, roleRequiresUnit, type AppRole } from "@/lib/roles";
 
 const NO_UNIT = "__none__";
 
@@ -79,18 +79,20 @@ export function UserManager() {
       .map((unit) => ({
         id: unit.id,
         name: unit.name,
-        users: sortedUsers.filter((user) => user.unitId === unit.id),
+        users: sortedUsers.filter(
+          (user) => user.unitId === unit.id && roleRequiresUnit(user.role as AppRole),
+        ),
       }))
       .filter((group) => group.users.length > 0),
     {
       id: NO_UNIT,
       name: "Sem unidade definida",
-      users: sortedUsers.filter((user) => !user.unitId && user.role !== "auditor"),
+      users: sortedUsers.filter((user) => !user.unitId && roleRequiresUnit(user.role as AppRole)),
     },
     {
       id: "__network__",
       name: "Acesso a toda a rede",
-      users: sortedUsers.filter((user) => user.role === "auditor"),
+      users: sortedUsers.filter((user) => user.role === "auditor" || user.role === "socio"),
     },
   ].filter((group) => group.users.length > 0);
 
@@ -129,9 +131,10 @@ export function UserManager() {
               </header>
               <ul className="space-y-4 p-3 sm:p-4">
                 {group.users.map((user) => {
+                  const baseRole = (user.role as AppRole | null) ?? "atendente";
                   const base: Draft = {
-                    role: (user.role as AppRole | null) ?? "atendente",
-                    unitId: user.unitId ?? NO_UNIT,
+                    role: baseRole,
+                    unitId: roleRequiresUnit(baseRole) ? (user.unitId ?? NO_UNIT) : NO_UNIT,
                     fullName: user.fullName,
                     email: user.email ?? "",
                   };
@@ -175,7 +178,7 @@ export function UserManager() {
                           onValueChange={(role) =>
                             patch({
                               role: role as AppRole,
-                              unitId: role === "auditor" ? NO_UNIT : draft.unitId,
+                              unitId: roleRequiresUnit(role as AppRole) ? draft.unitId : NO_UNIT,
                             })
                           }
                         >
@@ -192,9 +195,11 @@ export function UserManager() {
                         </Select>
                       </div>
 
-                      {draft.role === "auditor" ? (
+                      {!roleRequiresUnit(draft.role) ? (
                         <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                          Acesso a todas as unidades
+                          {draft.role === "socio"
+                            ? "Sócio · retiradas de todas as unidades"
+                            : "Acesso a todas as unidades"}
                         </div>
                       ) : (
                         <div className="grid gap-2">
@@ -220,12 +225,16 @@ export function UserManager() {
 
                       <Button
                         size="sm"
-                        disabled={!dirty || mutation.isPending}
+                        disabled={
+                          !dirty ||
+                          mutation.isPending ||
+                          (roleRequiresUnit(draft.role) && draft.unitId === NO_UNIT)
+                        }
                         onClick={() =>
                           mutation.mutate({
                             userId: user.id,
                             role: draft.role,
-                            unitId: draft.unitId === NO_UNIT ? null : draft.unitId,
+                            unitId: roleRequiresUnit(draft.role) ? draft.unitId : null,
                             fullName: draft.fullName.trim(),
                             email: draft.email.trim(),
                           })

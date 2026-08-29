@@ -1,5 +1,4 @@
 export const SALES_REPORT_CATEGORIES = [
-  "Serviços",
   "Bebida",
   "Assinatura Nova",
   "Renovação",
@@ -30,7 +29,6 @@ export function emptyUnitSalesSummary(unitId: string): UnitSalesSummary {
   return {
     unitId,
     categories: {
-      Serviços: emptyMetric(),
       Bebida: emptyMetric(),
       "Assinatura Nova": emptyMetric(),
       Renovação: emptyMetric(),

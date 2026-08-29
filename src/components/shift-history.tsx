@@ -10,14 +10,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuditorReferences, type CashCountRow, type ShiftRow } from "@/hooks/use-auditor-data";
 
 const PAGE_SIZE = 20;
-
-/** Turno encerrado que teve diferença não é só "Fechado" — o caso foi tratado. */
-function statusLabel(shift: ShiftRow, resolved: boolean, hasDifference: boolean): string {
-  if (shift.status === "open") return "Aberto";
-  if (shift.status === "disputed") return "Com divergência";
-  if (resolved && hasDifference) return "Divergência encerrada";
-  return "Fechado";
-}
 const COUNT_LABELS: Record<string, string> = {
   opening: "Abertura",
   closing: "Fechamento",
@@ -28,23 +20,16 @@ export function ShiftHistory() {
   const { data: references } = useAuditorReferences();
   const [detail, setDetail] = useState<ShiftRow | null>(null);
   const [page, setPage] = useState(0);
-  // "all" por padrão para não esconder histórico de quem já usa a tela; quem
-  // quiser recortar escolhe o período.
-  const [period, setPeriod] = useState<PeriodDays>("all");
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-shift-history", page, period],
+    queryKey: ["audit-shift-history", page],
     refetchInterval: 30_000,
     queryFn: async () => {
-      const cutoff = periodCutoff(period);
-      let history = supabase
-        .from("shifts")
-        .select("*", { count: "exact" })
-        .in("status", ["open", "closed", "disputed"]);
-      if (cutoff) history = history.gte("opened_at", cutoff);
-
       const [historyResult, openCountResult] = await Promise.all([
-        history
+        supabase
+          .from("shifts")
+          .select("*", { count: "exact" })
+          .in("status", ["open", "closed", "disputed"])
           .order("opened_at", { ascending: false })
           .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1),
         supabase.from("shifts").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -100,81 +85,9 @@ export function ShiftHistory() {
   const count = pageData?.count ?? 0;
   const openCount = pageData?.openCount ?? 0;
 
-  /**
-   * Uma linha por turno, com tudo já calculado. Os cartões do celular e a
-   * tabela do desktop mostram os mesmos números: calcular nos dois lugares foi
-   * o que deixou as duas telas discordarem no passado.
-   */
-  const views = shifts.map((s) => {
-    const diff =
-      Math.round((Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100) / 100;
-    const openingBad = Math.abs(diff) >= 0.01;
-
-    const hasClosing = s.expected_closing_total !== null && s.closing_total !== null;
-    const shiftDiff = hasClosing
-      ? Math.round((Number(s.closing_total) - Number(s.expected_closing_total)) * 100) / 100
-      : null;
-    const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
-
-    const handoverCounts = pageCounts.filter(
-      (cashCount) => cashCount.shift_id === s.id && cashCount.count_type === "handover",
-    );
-    const handoverCount = handoverCounts[handoverCounts.length - 1];
-    const handoverDiff = handoverCount
-      ? Math.round((Number(handoverCount.total_calculated) - Number(s.closing_total ?? 0)) * 100) /
-        100
-      : null;
-    const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
-
-    // A diferença registrada nunca some — é o histórico do que foi contado. O
-    // que muda ao encerrar é o alarme: divergência tratada não segue vermelha.
-    const resolved = Boolean(s.resolved_at);
-    const hasDifference = openingBad || shiftBad || handoverBad || s.status === "disputed";
-    const bad = hasDifference && !resolved;
-
-    const reason = handoverBad
-      ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
-      : shiftBad
-        ? `${differenceReason(shiftDiff)} de ${formatBRL(Math.abs(shiftDiff!))} no fechamento`
-        : openingBad
-          ? `${differenceReason(diff)} de ${formatBRL(Math.abs(diff))} na abertura`
-          : s.status === "disputed"
-            ? "Sem diferença matemática — revisar status"
-            : "Sem divergência";
-
-    return {
-      shift: s,
-      diff,
-      openingBad,
-      hasClosing,
-      shiftDiff,
-      shiftBad,
-      handoverCount,
-      handoverDiff,
-      handoverBad,
-      resolved,
-      hasDifference,
-      bad,
-      reason,
-    };
-  });
-
   return (
     <section className="surface-panel p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg">Histórico de turnos e divergências</h2>
-        <div className="w-full sm:w-56">
-          <PeriodFilter
-            value={period}
-            onChange={(next) => {
-              setPeriod(next);
-              // A paginação é do recorte anterior; sem isto a página 3 de um
-              // filtro largo vira uma tela vazia num filtro estreito.
-              setPage(0);
-            }}
-          />
-        </div>
-      </div>
+      <h2 className="text-lg">Histórico de turnos e divergências</h2>
       <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
         <Clock3 className="size-4 text-primary" aria-hidden />
         <span>
@@ -192,33 +105,117 @@ export function ShiftHistory() {
       {shifts.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">Nenhum turno registrado ainda.</p>
       ) : (
-        <>
-          {/* Cartões no celular — a tabela completa só cabe em telas largas. */}
-          <div className="mt-4 space-y-2 md:hidden">
-            {views.map((view) => {
-              const { shift: s, bad, hasDifference, resolved, reason } = view;
-              return (
-                <div
-                  key={s.id}
-                  className={`rounded-xl border p-3 ${
-                    bad ? "border-destructive/60 bg-destructive/10" : "border-border/60 bg-muted/30"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1 text-sm font-semibold">
-                      {bad ? (
-                        <AlertTriangle className="size-4 text-destructive" aria-hidden />
-                      ) : null}
-                      {references.unitNames[s.unit_id] ?? "Unidade"}
-                    </span>
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        s.status === "open"
-                          ? "bg-primary/15 text-primary"
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="py-2 pr-3">Unidade</th>
+                <th className="py-2 pr-3">Situação</th>
+                <th className="py-2 pr-3">Onde está a diferença?</th>
+                <th className="py-2 pr-3">Abertura</th>
+                <th className="py-2 pr-3">Esperado (abertura)</th>
+                <th className="py-2 pr-3">Contado (abertura)</th>
+                <th className="py-2 pr-3">Diferença abertura</th>
+                <th className="py-2 pr-3">Esperado no Fechamento</th>
+                <th className="py-2 pr-3">Entregue no fechamento</th>
+                <th className="py-2 pr-3">Diferença do Turno</th>
+                <th className="py-2 pr-3">Contado no recebimento</th>
+                <th className="py-2 pr-3">Diferença do repasse</th>
+                <th className="py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {shifts.map((s) => {
+                const diff =
+                  Math.round(
+                    (Number(s.actual_opening_total) - Number(s.expected_opening_total)) * 100,
+                  ) / 100;
+                const hasClosing = s.expected_closing_total !== null && s.closing_total !== null;
+                const shiftDiff = hasClosing
+                  ? Math.round((Number(s.closing_total) - Number(s.expected_closing_total)) * 100) /
+                    100
+                  : null;
+                const shiftBad = shiftDiff !== null && Math.abs(shiftDiff) >= 0.01;
+                const openingBad = Math.abs(diff) >= 0.01;
+                const handoverCounts = pageCounts.filter(
+                  (cashCount) => cashCount.shift_id === s.id && cashCount.count_type === "handover",
+                );
+                const handoverCount = handoverCounts[handoverCounts.length - 1];
+                const handoverDiff = handoverCount
+                  ? Math.round(
+                      (Number(handoverCount.total_calculated) - Number(s.closing_total ?? 0)) * 100,
+                    ) / 100
+                  : null;
+                const handoverBad = handoverDiff !== null && Math.abs(handoverDiff) >= 0.01;
+                const bad = openingBad || shiftBad || handoverBad || s.status === "disputed";
+                const reason = handoverBad
+                  ? `${differenceReason(handoverDiff)} de ${formatBRL(Math.abs(handoverDiff!))} no recebimento`
+                  : shiftBad
+                    ? `${differenceReason(shiftDiff)} de ${formatBRL(Math.abs(shiftDiff!))} no fechamento`
+                    : openingBad
+                      ? `${differenceReason(diff)} de ${formatBRL(Math.abs(diff))} na abertura`
+                      : s.status === "disputed"
+                        ? "Sem diferença matemática — revisar status"
+                        : "Sem divergência";
+                return (
+                  <tr
+                    key={s.id}
+                    className={`border-t border-border/60 ${bad ? "bg-destructive/10" : ""}`}
+                  >
+                    <td className="py-3 pr-3">
+                      <span className="flex items-center gap-1">
+                        {bad ? (
+                          <AlertTriangle className="size-4 text-destructive" aria-hidden />
+                        ) : null}
+                        {references.unitNames[s.unit_id] ?? "Unidade"}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                          s.status === "open"
+                            ? "bg-primary/15 text-primary"
+                            : s.status === "disputed"
+                              ? "bg-destructive/15 text-destructive"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {s.status === "open"
+                          ? "Aberto"
                           : s.status === "disputed"
-                            ? "bg-destructive/15 text-destructive"
-                            : "bg-muted text-muted-foreground"
-                      }`}
+                            ? "Com divergência"
+                            : "Fechado"}
+                      </span>
+                    </td>
+                    <td
+                      className={`py-3 pr-3 text-xs font-semibold ${bad ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {reason}
+                    </td>
+                    <td className="py-3 pr-3 text-muted-foreground">
+                      {new Date(s.opened_at).toLocaleString("pt-BR")}
+                      <span className="block text-xs">
+                        {references.names[s.opened_by] ?? "Usuário"}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3">{formatBRL(s.expected_opening_total)}</td>
+                    <td className="py-3 pr-3">{formatBRL(s.actual_opening_total)}</td>
+                    <td
+                      className={`py-3 pr-3 font-semibold ${openingBad ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {diff > 0 ? "+" : ""}
+                      {formatBRL(diff)}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {s.expected_closing_total === null
+                        ? "—"
+                        : formatBRL(s.expected_closing_total)}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {s.closing_total === null ? "—" : formatBRL(s.closing_total)}
+                    </td>
+                    <td
+                      className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
                     >
                       {statusLabel(s, resolved, hasDifference)}
                     </span>
@@ -306,112 +303,43 @@ export function ShiftHistory() {
                           {bad ? (
                             <AlertTriangle className="size-4 text-destructive" aria-hidden />
                           ) : null}
-                          {references.unitNames[s.unit_id] ?? "Unidade"}
+                        </>
+                      )}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {handoverCount ? formatBRL(handoverCount.total_calculated) : "—"}
+                      {handoverCount ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {references.names[handoverCount.counted_by] ?? "Usuário"}
                         </span>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                            s.status === "open"
-                              ? "bg-primary/15 text-primary"
-                              : s.status === "disputed"
-                                ? "bg-destructive/15 text-destructive"
-                                : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {statusLabel(s, resolved, hasDifference)}
-                        </span>
-                      </td>
-                      <td
-                        className={`py-3 pr-3 text-xs font-semibold ${bad ? "text-destructive" : "text-muted-foreground"}`}
-                      >
-                        {reason}
-                        {resolved && hasDifference ? (
-                          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                            Encerrada
-                            {s.resolved_at
-                              ? ` em ${new Date(s.resolved_at).toLocaleString("pt-BR")}`
-                              : ""}
-                            {s.resolution_note ? `: ${s.resolution_note}` : ""}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="py-3 pr-3 text-muted-foreground">
-                        {new Date(s.opened_at).toLocaleString("pt-BR")}
-                        <span className="block text-xs">
-                          {references.names[s.opened_by] ?? "Usuário"}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-3">{formatBRL(s.expected_opening_total)}</td>
-                      <td className="py-3 pr-3">{formatBRL(s.actual_opening_total)}</td>
-                      <td
-                        className={`py-3 pr-3 font-semibold ${openingBad ? "text-destructive" : "text-muted-foreground"}`}
-                      >
-                        {diff > 0 ? "+" : ""}
-                        {formatBRL(diff)}
-                      </td>
-                      <td className="py-3 pr-3">
-                        {s.expected_closing_total === null
-                          ? "—"
-                          : formatBRL(s.expected_closing_total)}
-                      </td>
-                      <td className="py-3 pr-3">
-                        {s.closing_total === null ? "—" : formatBRL(s.closing_total)}
-                      </td>
-                      <td
-                        className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
-                      >
-                        {shiftDiff === null ? (
-                          "—"
-                        ) : (
-                          <>
-                            {shiftDiff > 0 ? "+" : ""}
-                            {formatBRL(shiftDiff)}
-                            {shiftBad ? (
-                              <span className="block text-xs">
-                                {shiftDiff > 0 ? "Sobra" : "Falta"}
-                              </span>
-                            ) : null}
-                          </>
-                        )}
-                      </td>
-                      <td className="py-3 pr-3">
-                        {handoverCount ? formatBRL(handoverCount.total_calculated) : "—"}
-                        {handoverCount ? (
-                          <span className="block text-xs text-muted-foreground">
-                            {references.names[handoverCount.counted_by] ?? "Usuário"}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td
-                        className={`py-3 pr-3 font-semibold ${handoverBad ? "text-destructive" : "text-muted-foreground"}`}
-                      >
-                        {handoverDiff === null ? (
-                          "—"
-                        ) : (
-                          <>
-                            {handoverDiff > 0 ? "+" : ""}
-                            {formatBRL(handoverDiff)}
-                            {handoverBad ? (
-                              <span className="block text-xs">
-                                {differenceReason(handoverDiff)}
-                              </span>
-                            ) : null}
-                          </>
-                        )}
-                      </td>
-                      <td className="py-3">
-                        <Button size="sm" variant="ghost" onClick={() => setDetail(s)}>
-                          Ver contagem
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+                      ) : null}
+                    </td>
+                    <td
+                      className={`py-3 pr-3 font-semibold ${handoverBad ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {handoverDiff === null ? (
+                        "—"
+                      ) : (
+                        <>
+                          {handoverDiff > 0 ? "+" : ""}
+                          {formatBRL(handoverDiff)}
+                          {handoverBad ? (
+                            <span className="block text-xs">{differenceReason(handoverDiff)}</span>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      <Button size="sm" variant="ghost" onClick={() => setDetail(s)}>
+                        Ver contagem
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">

@@ -17,8 +17,7 @@ import {
 } from "@/components/ui/select";
 import { destinationForAccess, resolveAccessState } from "@/lib/access";
 import { friendlyError } from "@/lib/errors";
-import { ROLE_LABELS, type AppRole } from "@/lib/roles";
-import { listSignupUnits } from "@/lib/units.functions";
+import { ROLE_LABELS, roleRequiresUnit, type AppRole } from "@/lib/roles";
 
 const SIGNUP_ROLES: AppRole[] = ["atendente", "supervisor", "socio"];
 
@@ -96,13 +95,23 @@ function AuthPage() {
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
+    if (roleRequiresUnit(requestedRole) && !unitId) {
+      toast.error("Selecione a unidade", {
+        description: "Atendentes e supervisores precisam estar vinculados a uma unidade.",
+      });
+      return;
+    }
     setLoading(true);
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { full_name: fullName, unit_id: unitId || null, role: requestedRole },
+        data: {
+          full_name: fullName,
+          unit_id: roleRequiresUnit(requestedRole) ? unitId : null,
+          role: requestedRole,
+        },
       },
     });
     setLoading(false);
@@ -188,7 +197,14 @@ function AuthPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="signup-role">Função desejada</Label>
-                <Select value={requestedRole} onValueChange={(v) => setRequestedRole(v as AppRole)}>
+                <Select
+                  value={requestedRole}
+                  onValueChange={(value) => {
+                    const role = value as AppRole;
+                    setRequestedRole(role);
+                    if (!roleRequiresUnit(role)) setUnitId("");
+                  }}
+                >
                   <SelectTrigger id="signup-role">
                     <SelectValue placeholder="Selecione a função" />
                   </SelectTrigger>
@@ -201,21 +217,27 @@ function AuthPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="unit">Unidade</Label>
-                <Select value={unitId} onValueChange={setUnitId}>
-                  <SelectTrigger id="unit">
-                    <SelectValue placeholder="Selecione a unidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(units ?? []).map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {roleRequiresUnit(requestedRole) ? (
+                <div className="space-y-2">
+                  <Label htmlFor="unit">Unidade</Label>
+                  <Select value={unitId} onValueChange={setUnitId}>
+                    <SelectTrigger id="unit">
+                      <SelectValue placeholder="Selecione a unidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(units ?? []).map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+                  Sócios têm acesso às retiradas de todas as unidades da rede.
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="signup-email">E-mail</Label>
                 <Input

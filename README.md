@@ -80,66 +80,6 @@ supabase start
 supabase test db
 ```
 
-## Banco de dados
-
-O deploy publica a interface, **não aplica as migrations**. Código que
-referencia schema ainda não aplicado falha só em produção, no clique do
-usuário — não no build nem na CI. Por isso as duas verificações abaixo valem
-sempre que uma migration nova entra na `main`.
-
-### Conferir quais migrations já foram aplicadas
-
-Com o projeto vinculado (`supabase link --project-ref <id>`):
-
-```sh
-supabase migration list
-```
-
-A saída mostra `Local` e `Remote` lado a lado — o que aparece só na coluna
-local ainda não rodou no banco. Aplicar:
-
-```sh
-supabase db push
-```
-
-Sem o CLI, dá para listar o que o banco tem pelo SQL editor e comparar com
-`ls supabase/migrations`:
-
-```sql
-select version, name
-from supabase_migrations.schema_migrations
-order by version desc
-limit 30;
-```
-
-### Regenerar os tipos do Supabase
-
-`src/integrations/supabase/types.ts` é **gerado**, e quando ele desanda o
-projeto inteiro perde a verificação de tipos: declarações duplicadas colapsam
-o tipo `Database` para `never`, todo `.from()` e `.rpc()` vira `any`, e erros
-reais passam despercebidos até quebrarem na tela do usuário. Já aconteceu.
-
-No fluxo Lovable, o arquivo é **regenerado automaticamente pela plataforma
-após cada migration aplicada** — não edite à mão. No fluxo local com Supabase
-CLI, depois de aplicar migrations, regenere:
-
-```sh
-supabase gen types typescript --linked > src/integrations/supabase/types.ts
-bun run typecheck
-```
-
-### Branch protection na `main`
-
-A CI só protege o repositório se for **exigida** nas configurações do GitHub —
-sem isso, um merge direto na `main` pode desfazer correções que já passaram
-por PR. No GitHub: **Settings → Branches → Add branch ruleset** para `main`,
-marcando:
-
-- Require a pull request before merging
-- Require status checks to pass → check `Lint, typecheck, test e build`
-- Require branches to be up to date before merging
-- Block force pushes
-
 ## Estrutura principal
 
 ```text

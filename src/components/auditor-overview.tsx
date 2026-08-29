@@ -1,20 +1,6 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
-import { friendlyError } from "@/lib/errors";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { differenceReason, explainShiftDivergence } from "@/lib/divergences";
 import { useAuditorData } from "@/hooks/use-auditor-data";

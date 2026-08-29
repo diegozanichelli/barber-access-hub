@@ -30,7 +30,6 @@ import {
   expenseSchema,
   incomePhotoRequired,
   incomeSchema,
-  isMissingCategoryEnum,
   isMissingUpgradeEnum,
   isRoundAmount,
   parseAmount,
@@ -145,10 +144,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
             })),
           );
           if (fallbackError) throw fallbackError;
-        } else if (insertError && isMissingCategoryEnum(insertError, "Serviços")) {
-          throw new Error(
-            "A categoria Serviços ainda não foi publicada no banco. Aplique as migrations pendentes e tente de novo.",
-          );
         } else if (insertError) {
           throw insertError;
         }

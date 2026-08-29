@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
+import { roleRequiresUnit } from "@/lib/roles";
 
 const roleSchema = z.enum(["atendente", "supervisor", "socio", "auditor"]);
 const approvableRoleSchema = z.enum(["atendente", "supervisor", "socio"]);
@@ -142,12 +143,16 @@ export const approveUser = createServerFn({ method: "POST" })
       .object({
         userId: z.string().uuid(),
         role: approvableRoleSchema,
-        unitId: z.string().uuid(),
+        unitId: z.string().uuid().nullable(),
       })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
     await assertAuditor(context);
+    if (roleRequiresUnit(data.role) && !data.unitId) {
+      throw new Error("Atendentes e supervisores precisam de uma unidade.");
+    }
+    const unitId = roleRequiresUnit(data.role) ? data.unitId : null;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { error: delError } = await supabaseAdmin
@@ -165,7 +170,7 @@ export const approveUser = createServerFn({ method: "POST" })
       .from("profiles")
       .update({
         status: "approved",
-        unit_id: data.unitId,
+        unit_id: unitId,
         approved_by: context.userId,
         approved_at: new Date().toISOString(),
       })
@@ -215,6 +220,10 @@ export const updateManagedUser = createServerFn({ method: "POST" })
     if (data.userId === context.userId && data.role !== "auditor") {
       throw new Error("Você não pode remover seu próprio acesso de Auditor.");
     }
+    if (roleRequiresUnit(data.role) && !data.unitId) {
+      throw new Error("Atendentes e supervisores precisam de uma unidade.");
+    }
+    const unitId = roleRequiresUnit(data.role) ? data.unitId : null;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -231,7 +240,7 @@ export const updateManagedUser = createServerFn({ method: "POST" })
 
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
-      .update({ unit_id: data.unitId, full_name: data.fullName })
+      .update({ unit_id: unitId, full_name: data.fullName })
       .eq("id", data.userId);
     if (profileError) throw profileError;
 

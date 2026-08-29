@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET LOCAL search_path = public, extensions;
-SELECT plan(10);
+SELECT plan(11);
 
 SELECT has_function(
   'public', 'delete_empty_open_shift', ARRAY['uuid', 'text'],
@@ -34,6 +34,12 @@ WHERE id IN (
 INSERT INTO public.user_roles (user_id, role) VALUES
   ('00000000-0000-0000-0000-000000000102', 'socio'),
   ('00000000-0000-0000-0000-000000000103', 'atendente');
+
+SELECT is(
+  (SELECT unit_id FROM public.profiles WHERE id = '00000000-0000-0000-0000-000000000102'),
+  NULL::uuid,
+  'partner is network-scoped and has no unit assignment'
+);
 
 INSERT INTO public.shifts (
   id, unit_id, opened_by, actual_opening_total, expected_opening_total, status

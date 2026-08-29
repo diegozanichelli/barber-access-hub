@@ -10,7 +10,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import { requireDashboardRole } from "@/lib/route-guards";
-import { getReceiptUrl } from "@/lib/transactions";
 
 export const Route = createFileRoute("/_authenticated/socio")({
   beforeLoad: () => requireDashboardRole("socio"),

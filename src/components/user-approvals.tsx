@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { approveUser, listPendingUsers, rejectUser } from "@/lib/admin-users.functions";
-import { ROLE_LABELS, type AppRole } from "@/lib/roles";
+import { ROLE_LABELS, roleRequiresUnit, type AppRole } from "@/lib/roles";
 
 const NO_UNIT = "__none__";
 type ApprovableRole = Exclude<AppRole, "auditor">;
@@ -48,7 +48,7 @@ export function UserApprovals() {
   }
 
   const approveMutation = useMutation({
-    mutationFn: (vars: { userId: string; role: ApprovableRole; unitId: string }) =>
+    mutationFn: (vars: { userId: string; role: ApprovableRole; unitId: string | null }) =>
       approve({ data: vars }),
     onSuccess: () => {
       toast.success("Cadastro aprovado");
@@ -115,7 +115,7 @@ export function UserApprovals() {
                         ...p,
                         [user.id]: {
                           role: role as ApprovableRole,
-                          unitId: draft.unitId,
+                          unitId: roleRequiresUnit(role as AppRole) ? draft.unitId : NO_UNIT,
                         },
                       }))
                     }
@@ -132,34 +132,40 @@ export function UserApprovals() {
                     </SelectContent>
                   </Select>
 
-                  <Select
-                    value={draft.unitId}
-                    onValueChange={(unitId) =>
-                      setDrafts((p) => ({ ...p, [user.id]: { ...draft, unitId } }))
-                    }
-                  >
-                    <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
-                      <SelectValue placeholder="Unidade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_UNIT}>Selecione uma unidade</SelectItem>
-                      {(units ?? []).map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {roleRequiresUnit(draft.role) ? (
+                    <Select
+                      value={draft.unitId}
+                      onValueChange={(unitId) =>
+                        setDrafts((p) => ({ ...p, [user.id]: { ...draft, unitId } }))
+                      }
+                    >
+                      <SelectTrigger aria-label={`Unidade de ${user.fullName}`}>
+                        <SelectValue placeholder="Unidade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_UNIT}>Selecione uma unidade</SelectItem>
+                        {(units ?? []).map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+                      Sócio · acesso a todas as unidades
+                    </div>
+                  )}
 
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      disabled={busy || draft.unitId === NO_UNIT}
+                      disabled={busy || (roleRequiresUnit(draft.role) && draft.unitId === NO_UNIT)}
                       onClick={() =>
                         approveMutation.mutate({
                           userId: user.id,
                           role: draft.role,
-                          unitId: draft.unitId,
+                          unitId: roleRequiresUnit(draft.role) ? draft.unitId : null,
                         })
                       }
                     >
