@@ -14,6 +14,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: { key: string; value: number; description: string; updated_at: string }
+        Insert: { key: string; value: number; description?: string; updated_at?: string }
+        Update: { key?: string; value?: number; description?: string; updated_at?: string }
+        Relationships: []
+      }
+      shift_reminders: {
+        Row: { id: string; shift_id: string; sent_at: string; recipients: number }
+        Insert: { id?: string; shift_id: string; sent_at?: string; recipients?: number }
+        Update: { id?: string; shift_id?: string; sent_at?: string; recipients?: number }
+        Relationships: []
+      }
       cancelled_openings: {
         Row: {
           cancelled_by: string
@@ -286,7 +298,7 @@ export type Database = {
           endpoint: string
           id: string
           p256dh: string
-          updated_at: string
+          last_used_at: string | null
           user_agent: string | null
           user_id: string
         }
@@ -296,7 +308,7 @@ export type Database = {
           endpoint: string
           id?: string
           p256dh: string
-          updated_at?: string
+          last_used_at?: string | null
           user_agent?: string | null
           user_id: string
         }
@@ -306,7 +318,7 @@ export type Database = {
           endpoint?: string
           id?: string
           p256dh?: string
-          updated_at?: string
+          last_used_at?: string | null
           user_agent?: string | null
           user_id?: string
         }
@@ -376,62 +388,6 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      transaction_change_requests: {
-        Row: {
-          action: string
-          created_at: string
-          decided_at: string | null
-          decided_by: string | null
-          id: string
-          proposed_amount: number | null
-          proposed_description: string | null
-          reason: string
-          requested_by: string
-          status: string
-          transaction_id: string
-          transaction_snapshot: Json
-          updated_at: string
-        }
-        Insert: {
-          action: string
-          created_at?: string
-          decided_at?: string | null
-          decided_by?: string | null
-          id?: string
-          proposed_amount?: number | null
-          proposed_description?: string | null
-          reason: string
-          requested_by: string
-          status?: string
-          transaction_id: string
-          transaction_snapshot: Json
-          updated_at?: string
-        }
-        Update: {
-          action?: string
-          created_at?: string
-          decided_at?: string | null
-          decided_by?: string | null
-          id?: string
-          proposed_amount?: number | null
-          proposed_description?: string | null
-          reason?: string
-          requested_by?: string
-          status?: string
-          transaction_id?: string
-          transaction_snapshot?: Json
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "transaction_change_requests_transaction_id_fkey"
-            columns: ["transaction_id"]
-            isOneToOne: false
-            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -556,6 +512,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      app_setting: {
+        Args: { _key: string; _fallback: number }
+        Returns: number
+      }
+      create_partner_withdrawal: {
+        Args: { _amount: number; _note?: string; _partner_id: string; _shift_id: string }
+        Returns: string
+      }
+      stale_open_shifts: {
+        Args: never
+        Returns: {
+          shift_id: string
+          unit_id: string
+          unit_name: string
+          opened_by: string
+          opened_at: string
+          hours_open: number
+          reminders_sent: number
+          last_reminder_at: string | null
+        }[]
+      }
       correct_opening_cash_count: {
         Args: { _quantities: Json; _reason: string; _shift_id: string }
         Returns: number
@@ -569,10 +546,6 @@ export type Database = {
         Returns: undefined
       }
       list_transaction_change_requests: { Args: never; Returns: Json[] }
-      master_delete_transaction: {
-        Args: { _reason: string; _transaction_id: string }
-        Returns: string
-      }
       request_transaction_change: {
         Args: {
           _action: "edit" | "delete"
@@ -591,10 +564,6 @@ export type Database = {
         }
         Returns: Json
       }
-      delete_empty_open_shift: {
-        Args: { _reason: string; _shift_id: string }
-        Returns: undefined
-      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -612,13 +581,6 @@ export type Database = {
           unit_id: string
         }[]
       }
-      open_shift: {
-        Args: {
-          _notes?: string
-          _quantities: Json
-          _unit_id: string
-        }
-      }
       master_delete_transaction: {
         Args: { _reason: string; _transaction_id: string }
         Returns: undefined
@@ -631,24 +593,9 @@ export type Database = {
         Args: { _notes?: string; _pending_shift_id: string; _quantities: Json }
         Returns: Json
       }
-      request_transaction_change: {
-        Args: {
-          _notes?: string
-          _pending_shift_id: string
-          _quantities: Json
-        }
-        Returns: string
-      }
       resolve_shift_dispute: {
         Args: { _note: string; _shift_id: string }
         Returns: undefined
-      }
-      respond_partner_withdrawal: {
-        Args: {
-          _decision: Database["public"]["Enums"]["withdrawal_status"]
-          _withdrawal_id: string
-        }
-        Returns: Database["public"]["Enums"]["withdrawal_status"]
       }
       resolve_withdrawal_dispute: {
         Args: { _note: string; _withdrawal_id: string }
@@ -670,13 +617,13 @@ export type Database = {
       approval_status: "pending" | "approved" | "rejected"
       payment_method: "Pix" | "Crédito" | "Débito" | "Dinheiro" | "Cellcoins"
       transaction_category:
+        | "Serviços"
         | "Bebida"
         | "Assinatura Nova"
         | "Renovação"
         | "Upgrade"
         | "Despesa"
         | "Sangria"
-        | "Upgrade"
       withdrawal_status: "pending" | "approved" | "disputed"
     }
     CompositeTypes: {
@@ -809,13 +756,13 @@ export const Constants = {
       approval_status: ["pending", "approved", "rejected"],
       payment_method: ["Pix", "Crédito", "Débito", "Dinheiro", "Cellcoins"],
       transaction_category: [
+        "Serviços",
         "Bebida",
         "Assinatura Nova",
         "Renovação",
         "Upgrade",
         "Despesa",
         "Sangria",
-        "Upgrade",
       ],
       withdrawal_status: ["pending", "approved", "disputed"],
     },
