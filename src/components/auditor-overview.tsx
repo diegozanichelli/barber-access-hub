@@ -271,6 +271,21 @@ export function AuditorOverview({
                       <strong>Observação do recebimento:</strong> {handover.notes}
                     </p>
                   ) : null}
+                  <Button
+                    className="mt-3"
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      setNote("");
+                      setDispute({
+                        kind: "shift",
+                        id: shift.id,
+                        label: `Turno de ${data.names[shift.opened_by] ?? "Usuário"} · ${data.unitNames[shift.unit_id] ?? "Unidade"}`,
+                      });
+                    }}
+                  >
+                    Encerrar divergência
+                  </Button>
                 </article>
               );
             })}
@@ -279,13 +294,30 @@ export function AuditorOverview({
               .map((w) => (
                 <div
                   key={w.id}
-                  className="rounded-lg border border-destructive/40 bg-background/50 p-3 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/40 bg-background/50 p-3 text-sm"
                 >
-                  Retirada contestada · {data.unitNames[w.unit_id] ?? "Unidade"} ·{" "}
-                  {formatBRL(w.amount)} · {data.names[w.partner_id] ?? "Sócio"} ·{" "}
-                  {new Date(w.created_at).toLocaleString("pt-BR")}
+                  <span>
+                    Retirada contestada · {data.unitNames[w.unit_id] ?? "Unidade"} ·{" "}
+                    {formatBRL(w.amount)} · {data.names[w.partner_id] ?? "Sócio"} ·{" "}
+                    {new Date(w.created_at).toLocaleString("pt-BR")}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      setNote("");
+                      setDispute({
+                        kind: "withdrawal",
+                        id: w.id,
+                        label: `Retirada de ${formatBRL(w.amount)} · ${data.names[w.partner_id] ?? "Sócio"}`,
+                      });
+                    }}
+                  >
+                    Encerrar divergência
+                  </Button>
                 </div>
               ))}
+
           </div>
           {onViewShifts ? (
             <Button className="mt-4" variant="destructive" size="sm" onClick={onViewShifts}>
