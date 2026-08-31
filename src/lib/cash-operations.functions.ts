@@ -116,7 +116,19 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
         throw new Error("Você não tem permissão para conferir este caixa.");
       }
 
+      // First opening of a unit (no previous closed shift, e.g. after test
+      // shifts were removed) has no baseline: the count itself is the baseline.
+      const { count: closedShifts, error: closedError } = await context.supabase
+        .from("shifts")
+        .select("id", { count: "exact", head: true })
+        .eq("unit_id", data.unitId)
+        .eq("status", "closed")
+        .not("closing_total", "is", null);
+      if (closedError) throw closedError;
+      if (!closedShifts) return { matches: true };
+
       expected = await expectedOpeningTotal(context.supabase, data.unitId);
+
     } else if (data.mode === "closing") {
       const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
         await Promise.all([
