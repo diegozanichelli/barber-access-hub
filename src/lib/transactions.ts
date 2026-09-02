@@ -7,6 +7,7 @@ export const INCOME_CATEGORIES = [
   "Renovação",
   "Upgrade",
   "Serviços",
+  "Produtos",
 ] as const;
 export const PAYMENT_METHODS = ["Pix", "Crédito", "Débito", "Dinheiro", "Cellcoins"] as const;
 
@@ -21,9 +22,24 @@ export function displayedIncomeCategory(category: string, description: string | 
 }
 
 export function isMissingUpgradeEnum(error: { message?: string } | null): boolean {
+  return isMissingCategoryEnum(error, "Upgrade");
+}
+
+/**
+ * O banco recusa a categoria quando o enum ainda não a recebeu — situação real
+ * aqui, porque o deploy publica a interface sem aplicar as migrations.
+ *
+ * Serviços e Produtos não ganham o disfarce que Upgrade tem: gravar a venda
+ * com outra categoria para "funcionar" falsearia o relatório de vendas em
+ * silêncio, o que é pior que recusar. Recusar e dizer o que falta é mais honesto.
+ */
+export function isMissingCategoryEnum(
+  error: { message?: string } | null,
+  category: string,
+): boolean {
   return Boolean(
     error?.message?.includes("invalid input value for enum transaction_category") &&
-    error.message.includes("Upgrade"),
+    error.message.includes(category),
   );
 }
 

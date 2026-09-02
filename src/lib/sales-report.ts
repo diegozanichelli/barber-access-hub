@@ -3,6 +3,8 @@ export const SALES_REPORT_CATEGORIES = [
   "Assinatura Nova",
   "Renovação",
   "Upgrade",
+  "Serviços",
+  "Produtos",
 ] as const;
 
 export type SalesReportCategory = (typeof SALES_REPORT_CATEGORIES)[number];
@@ -26,16 +28,13 @@ function emptyMetric(): SalesMetric {
 }
 
 export function emptyUnitSalesSummary(unitId: string): UnitSalesSummary {
-  return {
-    unitId,
-    categories: {
-      Bebida: emptyMetric(),
-      "Assinatura Nova": emptyMetric(),
-      Renovação: emptyMetric(),
-      Upgrade: emptyMetric(),
-    },
-    total: emptyMetric(),
-  };
+  // Derivado de SALES_REPORT_CATEGORIES: acrescentar uma categoria à lista
+  // passa a contá-la aqui automaticamente, sem uma linha esquecida deixar a
+  // receita dela fora do relatório.
+  const categories = Object.fromEntries(
+    SALES_REPORT_CATEGORIES.map((category) => [category, emptyMetric()]),
+  ) as Record<SalesReportCategory, SalesMetric>;
+  return { unitId, categories, total: emptyMetric() };
 }
 
 export function summarizeSalesByUnit(

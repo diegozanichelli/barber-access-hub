@@ -317,7 +317,6 @@ export function AuditorOverview({
                   </Button>
                 </div>
               ))}
-
           </div>
           {onViewShifts ? (
             <Button className="mt-4" variant="destructive" size="sm" onClick={onViewShifts}>

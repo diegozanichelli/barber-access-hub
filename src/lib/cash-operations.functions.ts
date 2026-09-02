@@ -128,7 +128,6 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
       if (!closedShifts) return { matches: true };
 
       expected = await expectedOpeningTotal(context.supabase, data.unitId);
-
     } else if (data.mode === "closing") {
       const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
         await Promise.all([
