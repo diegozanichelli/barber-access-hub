@@ -41,6 +41,8 @@ const CATEGORIES = [
   "Assinatura Nova",
   "Renovação",
   "Upgrade",
+  "Serviços",
+  "Produtos",
   "Despesa",
   "Sangria",
 ] as const;

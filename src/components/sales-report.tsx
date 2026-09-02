@@ -13,6 +13,7 @@ import {
   emptyUnitSalesSummary,
   SALES_REPORT_CATEGORIES,
   summarizeSalesByUnit,
+  type SalesMetric,
   type SalesReportTransaction,
 } from "@/lib/sales-report";
 import { displayedIncomeCategory } from "@/lib/transactions";
@@ -90,7 +91,10 @@ export function SalesReport() {
     ...unit,
     sales: summaries[unit.id] ?? emptyUnitSalesSummary(unit.id),
   }));
-  const network = units.reduce(
+  // Inicializador derivado da lista de categorias, para uma categoria nova
+  // nunca ficar de fora do total da rede por causa de uma linha esquecida.
+  type NetworkTotals = Record<(typeof SALES_REPORT_CATEGORIES)[number] | "all", SalesMetric>;
+  const network = units.reduce<NetworkTotals>(
     (total, unit) => {
       for (const category of SALES_REPORT_CATEGORIES) {
         total[category].count += unit.sales.categories[category].count;
@@ -101,54 +105,38 @@ export function SalesReport() {
       return total;
     },
     {
-      Bebida: { count: 0, amount: 0 },
-      "Assinatura Nova": { count: 0, amount: 0 },
-      Renovação: { count: 0, amount: 0 },
-      Upgrade: { count: 0, amount: 0 },
+      ...(Object.fromEntries(
+        SALES_REPORT_CATEGORIES.map((category) => [category, { count: 0, amount: 0 }]),
+      ) as Record<(typeof SALES_REPORT_CATEGORIES)[number], SalesMetric>),
       all: { count: 0, amount: 0 },
     },
   );
 
   function exportReport() {
+    // Colunas derivadas das categorias: incluir uma categoria nova no relatório
+    // passa a exportá-la no CSV sem precisar editar cabeçalho e linhas à mão.
+    const metricCells = (metric: SalesMetric) => [metric.count, metric.amount.toFixed(2)];
     const rows = units.map((unit) => [
       unit.name,
-      unit.sales.categories.Bebida.count,
-      unit.sales.categories.Bebida.amount.toFixed(2),
-      unit.sales.categories["Assinatura Nova"].count,
-      unit.sales.categories["Assinatura Nova"].amount.toFixed(2),
-      unit.sales.categories.Renovação.count,
-      unit.sales.categories.Renovação.amount.toFixed(2),
-      unit.sales.categories.Upgrade.count,
-      unit.sales.categories.Upgrade.amount.toFixed(2),
-      unit.sales.total.count,
-      unit.sales.total.amount.toFixed(2),
+      ...SALES_REPORT_CATEGORIES.flatMap((category) =>
+        metricCells(unit.sales.categories[category]),
+      ),
+      ...metricCells(unit.sales.total),
     ]);
     rows.push([
       "TOTAL DA REDE",
-      network.Bebida.count,
-      network.Bebida.amount.toFixed(2),
-      network["Assinatura Nova"].count,
-      network["Assinatura Nova"].amount.toFixed(2),
-      network.Renovação.count,
-      network.Renovação.amount.toFixed(2),
-      network.Upgrade.count,
-      network.Upgrade.amount.toFixed(2),
-      network.all.count,
-      network.all.amount.toFixed(2),
+      ...SALES_REPORT_CATEGORIES.flatMap((category) => metricCells(network[category])),
+      ...metricCells(network.all),
     ]);
     downloadCSV(
       `vendas-por-unidade-${start}-a-${end}.csv`,
       toCSV(
         [
           "Unidade",
-          "Bebidas (lançamentos)",
-          "Bebidas (valor)",
-          "Novas assinaturas (lançamentos)",
-          "Novas assinaturas (valor)",
-          "Renovações (lançamentos)",
-          "Renovações (valor)",
-          "Upgrades (lançamentos)",
-          "Upgrades (valor)",
+          ...SALES_REPORT_CATEGORIES.flatMap((category) => [
+            `${category} (lançamentos)`,
+            `${category} (valor)`,
+          ]),
           "Total (lançamentos)",
           "Total (valor)",
         ],
