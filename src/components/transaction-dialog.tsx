@@ -65,6 +65,9 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [changeFile, setChangeFile] = useState<File | null>(null);
+  const [cashReceived, setCashReceived] = useState("");
+  const [changeMethod, setChangeMethod] = useState<ChangeMethod>("Dinheiro");
   const [error, setError] = useState<string | null>(null);
 
   const isIncome = type === "income";
@@ -80,6 +83,18 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const hasPix = payments.some((p) => p.method === "Pix");
   const photoRequired = isIncome ? hasPix : true;
 
+  const cashAmount = parsedPayments
+    .filter((p) => p.method === "Dinheiro" && Number.isFinite(p.value))
+    .reduce((sum, p) => sum + p.value, 0);
+  const receivedValue = parseAmount(cashReceived);
+  const changeValue = computeChange(receivedValue, cashAmount);
+  const changeInvalid =
+    isIncome &&
+    hasCash &&
+    cashReceived.trim() !== "" &&
+    (!Number.isFinite(receivedValue) || receivedValue < cashAmount);
+  const changePhotoRequired = isIncome && changeValue > 0 && changeMethod === "Pix";
+
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
 
@@ -90,6 +105,9 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     setAmount("");
     setDescription("");
     setFile(null);
+    setChangeFile(null);
+    setCashReceived("");
+    setChangeMethod("Dinheiro");
     setError(null);
   }
 
