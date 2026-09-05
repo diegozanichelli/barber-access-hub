@@ -108,7 +108,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     setAmount("");
     setDescription("");
     setFile(null);
-    setChangeFile(null);
     setCashReceived("");
     setChangeMethod("Dinheiro");
     setError(null);
@@ -251,8 +250,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     onError: (err: Error) => setError(friendlyError(err)),
   });
 
-  const blocked =
-    (photoRequired && !file) || (changePhotoRequired && !changeFile) || changeInvalid;
+  const blocked = (photoRequired && !file) || changeInvalid;
 
   const title = isIncome
     ? "Registrar Entrada"
