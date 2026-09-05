@@ -307,22 +307,8 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
       throw new Error("Este turno já foi fechado. Atualize a tela.");
 
     const total = calculateTotal(data.quantities as CashQuantities);
-    const expected =
-      Math.round(
-        ((transactions ?? []).reduce((running, transaction) => {
-          if (transaction.reverses_transaction_id || transaction.reversed_at) return running;
-          const amount = Number(transaction.amount);
-          if (
-            transaction.transaction_type === "income" &&
-            transaction.payment_method === "Dinheiro"
-          ) {
-            return running + amount;
-          }
-          return transaction.transaction_type === "income" ? running : running - amount;
-        }, Number(shift.actual_opening_total)) +
-          Number.EPSILON) *
-          100,
-      ) / 100;
+    const expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
+
 
     const legacyClient = context.supabase as unknown as {
       rpc: (name: "close_shift", args: Record<string, unknown>) => RpcResult;
