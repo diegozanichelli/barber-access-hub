@@ -25,6 +25,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import {
+  CHANGE_METHODS,
+  computeChange,
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
   expenseSchema,
@@ -37,6 +39,7 @@ import {
   safeDropSchema,
   uploadReceipt,
   UPGRADE_DESCRIPTION_MARKER,
+  type ChangeMethod,
   type IncomeCategory,
   type PaymentMethod,
 } from "@/lib/transactions";
@@ -65,6 +68,9 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [changeFile, setChangeFile] = useState<File | null>(null);
+  const [cashReceived, setCashReceived] = useState("");
+  const [changeMethod, setChangeMethod] = useState<ChangeMethod>("Dinheiro");
   const [error, setError] = useState<string | null>(null);
 
   const isIncome = type === "income";
@@ -80,6 +86,18 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const hasPix = payments.some((p) => p.method === "Pix");
   const photoRequired = isIncome ? hasPix : true;
 
+  const cashAmount = parsedPayments
+    .filter((p) => p.method === "Dinheiro" && Number.isFinite(p.value))
+    .reduce((sum, p) => sum + p.value, 0);
+  const receivedValue = parseAmount(cashReceived);
+  const changeValue = computeChange(receivedValue, cashAmount);
+  const changeInvalid =
+    isIncome &&
+    hasCash &&
+    cashReceived.trim() !== "" &&
+    (!Number.isFinite(receivedValue) || receivedValue < cashAmount);
+  const changePhotoRequired = isIncome && changeValue > 0 && changeMethod === "Pix";
+
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
 
@@ -90,6 +108,9 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     setAmount("");
     setDescription("");
     setFile(null);
+    setChangeFile(null);
+    setCashReceived("");
+    setChangeMethod("Dinheiro");
     setError(null);
   }
 
@@ -156,6 +177,29 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         } else if (insertError) {
           throw insertError;
         }
+        if (changeValue > 0) {
+          if (changeMethod === "Pix" && !changeFile) {
+            throw new Error("Anexe o comprovante do Pix do troco.");
+          }
+          const changePhoto = changeFile
+            ? await uploadReceipt(changeFile, unitId, shiftId)
+            : null;
+          const { error: changeError } = await supabase.from("transactions").insert({
+            shift_id: shiftId,
+            unit_id: unitId,
+            user_id: userId,
+            transaction_type: "expense",
+            category: "Troco",
+            payment_method: changeMethod,
+            client_name: clientName.trim() || null,
+            amount: changeValue,
+            description: `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`,
+            photo_url: changePhoto,
+            // O troco por Pix é uma saída da conta, não uma entrada a conferir.
+            pix_status: "paid",
+          });
+          if (changeError) throw changeError;
+        }
         return parsedRows.reduce((s, r) => s + r.amount, 0);
       }
 
@@ -212,7 +256,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     onError: (err: Error) => setError(friendlyError(err)),
   });
 
-  const blocked = photoRequired && !file;
+  const blocked =
+    (photoRequired && !file) || (changePhotoRequired && !changeFile) || changeInvalid;
 
   const title = isIncome
     ? "Registrar Entrada"
@@ -359,10 +404,67 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                 </div>
 
                 {hasCash ? (
-                  <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
-                    🚨 ATENÇÃO: Digite aqui EXATAMENTE o valor em dinheiro que VAI FICAR NA GAVETA
-                    física. Não misture dinheiro pessoal para troco.
-                  </p>
+                  <>
+                    <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
+                      🚨 ATENÇÃO: Digite acima EXATAMENTE o valor da venda pago em dinheiro. Se o
+                      cliente pagou com nota maior, informe abaixo quanto ele entregou.
+                    </p>
+
+                    <div className="space-y-2 rounded-lg border border-border/60 p-3">
+                      <Label htmlFor="tx-received">
+                        Quanto o cliente entregou em dinheiro? (opcional)
+                      </Label>
+                      <Input
+                        id="tx-received"
+                        className="h-12 text-lg"
+                        inputMode="decimal"
+                        value={cashReceived}
+                        onChange={(e) => setCashReceived(e.target.value)}
+                        placeholder="0,00"
+                      />
+                      {changeInvalid ? (
+                        <p className="text-xs font-semibold text-destructive">
+                          O valor entregue não pode ser menor que {formatBRL(cashAmount)}.
+                        </p>
+                      ) : changeValue > 0 ? (
+                        <>
+                          <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
+                            <span className="text-sm text-muted-foreground">Troco a devolver</span>
+                            <span className="text-lg font-semibold">{formatBRL(changeValue)}</span>
+                          </div>
+                          <Label htmlFor="tx-change-method">Como o troco foi devolvido?</Label>
+                          <Select
+                            value={changeMethod}
+                            onValueChange={(v) => setChangeMethod(v as ChangeMethod)}
+                          >
+                            <SelectTrigger id="tx-change-method" className="h-12">
+                              <SelectValue placeholder="Forma do troco" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CHANGE_METHODS.map((m) => (
+                                <SelectItem key={m} value={m}>
+                                  {m}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {changeMethod === "Pix" ? (
+                            <ReceiptUpload
+                              file={changeFile}
+                              onChange={setChangeFile}
+                              required
+                              label="Foto do comprovante do Pix do troco"
+                            />
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              O troco em dinheiro sai da gaveta: fica registrado, mas o saldo
+                              esperado continua o valor da venda.
+                            </p>
+                          )}
+                        </>
+                      ) : null}
+                    </div>
+                  </>
                 ) : null}
               </div>
             </>

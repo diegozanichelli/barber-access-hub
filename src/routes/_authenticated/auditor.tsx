@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AuditFeed } from "@/components/audit-feed";
 import { ChangeRequests } from "@/components/change-requests";
+import { PixApprovals } from "@/components/pix-approvals";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { ShiftHistory } from "@/components/shift-history";
 import { SalesReport } from "@/components/sales-report";
@@ -53,6 +54,7 @@ function AuditorDashboard() {
         <TabsList className="flex h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="feed">Lançamentos</TabsTrigger>
+          <TabsTrigger value="pix">Pix</TabsTrigger>
           <TabsTrigger value="history">Turnos</TabsTrigger>
           <TabsTrigger value="units">Unidades</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
@@ -73,6 +75,10 @@ function AuditorDashboard() {
 
         <TabsContent value="feed">
           <AuditFeed {...(selectedUnitId ? { selectedUnitId } : {})} />
+        </TabsContent>
+
+        <TabsContent value="pix">
+          <PixApprovals />
         </TabsContent>
 
         <TabsContent value="history">

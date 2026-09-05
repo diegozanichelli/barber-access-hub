@@ -109,3 +109,17 @@ export async function getReceiptUrl(path: string): Promise<string | null> {
   const { data } = await supabase.storage.from("receipts").createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
 }
+
+/** Formas possíveis de devolver o troco ao cliente. */
+export const CHANGE_METHODS = ["Dinheiro", "Pix"] as const;
+export type ChangeMethod = (typeof CHANGE_METHODS)[number];
+
+/**
+ * Troco = o que o cliente entregou em espécie menos o valor da venda pago em
+ * dinheiro. Valores inválidos ou sem sobra resultam em 0.
+ */
+export function computeChange(received: number, cashAmount: number): number {
+  if (!Number.isFinite(received) || !Number.isFinite(cashAmount)) return 0;
+  const diff = Math.round((received - cashAmount) * 100) / 100;
+  return diff > 0 ? diff : 0;
+}
