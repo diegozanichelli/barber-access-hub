@@ -139,7 +139,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         });
 
         if (photoRequired && !file) {
-          throw new Error("O comprovante é obrigatório para pagamentos via Pix.");
+          throw new Error("O comprovante é obrigatório para pagamentos e trocos via Pix.");
         }
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
@@ -441,19 +441,11 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                               ))}
                             </SelectContent>
                           </Select>
-                          {changeMethod === "Pix" ? (
-                            <ReceiptUpload
-                              file={changeFile}
-                              onChange={setChangeFile}
-                              required
-                              label="Foto do comprovante do Pix do troco"
-                            />
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              O troco em dinheiro sai da gaveta: fica registrado, mas o saldo
-                              esperado continua o valor da venda.
-                            </p>
-                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {changeMethod === "Pix"
+                              ? "Anexe abaixo o comprovante do Pix do troco (obrigatório) — é a mesma foto do comprovante da venda."
+                              : "O troco em dinheiro sai da gaveta: fica registrado, mas o saldo esperado continua o valor da venda."}
+                          </p>
                         </>
                       ) : null}
                     </div>
