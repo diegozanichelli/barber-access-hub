@@ -68,7 +68,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [changeFile, setChangeFile] = useState<File | null>(null);
+  
   const [cashReceived, setCashReceived] = useState("");
   const [changeMethod, setChangeMethod] = useState<ChangeMethod>("Dinheiro");
   const [error, setError] = useState<string | null>(null);
@@ -188,7 +188,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
             client_name: clientName.trim() || null,
             amount: changeValue,
             description: `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`,
-            photo_url: changePhoto,
+            // Troco em Pix reaproveita o comprovante principal já enviado acima.
+            photo_url: changeMethod === "Pix" ? photoPath : null,
             // O troco por Pix é uma saída da conta, não uma entrada a conferir.
             pix_status: "paid",
           });
