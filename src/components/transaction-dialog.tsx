@@ -84,8 +84,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   );
   const hasCash = payments.some((p) => p.method === "Dinheiro");
   const hasPix = payments.some((p) => p.method === "Pix");
-  const photoRequired = isIncome ? hasPix : true;
-
   const cashAmount = parsedPayments
     .filter((p) => p.method === "Dinheiro" && Number.isFinite(p.value))
     .reduce((sum, p) => sum + p.value, 0);
@@ -96,7 +94,9 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     hasCash &&
     cashReceived.trim() !== "" &&
     (!Number.isFinite(receivedValue) || receivedValue < cashAmount);
-  const changePhotoRequired = isIncome && changeValue > 0 && changeMethod === "Pix";
+  const changeIsPix = isIncome && changeValue > 0 && changeMethod === "Pix";
+  // O troco em Pix reaproveita o comprovante principal — sem segunda caixa de foto.
+  const photoRequired = isIncome ? hasPix || changeIsPix : true;
 
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
@@ -178,12 +178,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           throw insertError;
         }
         if (changeValue > 0) {
-          if (changeMethod === "Pix" && !changeFile) {
-            throw new Error("Anexe o comprovante do Pix do troco.");
-          }
-          const changePhoto = changeFile
-            ? await uploadReceipt(changeFile, unitId, shiftId)
-            : null;
           const { error: changeError } = await supabase.from("transactions").insert({
             shift_id: shiftId,
             unit_id: unitId,
