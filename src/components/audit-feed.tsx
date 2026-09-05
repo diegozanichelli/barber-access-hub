@@ -102,6 +102,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
         queryClient.invalidateQueries({ queryKey: ["shift-transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["audit-shift-feed"] }),
       ]);
       toast.success("Lançamento estornado", {
         description:
@@ -204,6 +205,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
         queryClient.invalidateQueries({ queryKey: ["transaction-change-requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["audit-shift-feed"] }),
       ]);
       toast.success("Lançamento excluído", {
         description: "A cópia para auditoria foi preservada.",
