@@ -246,6 +246,68 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const rows = pageData?.rows ?? [];
   const count = pageData?.count ?? 0;
 
+  const { data: shiftPageData, isLoading: isLoadingShifts } = useQuery({
+    queryKey: ["audit-shift-feed", shiftPage, unitId],
+    enabled: viewMode === "shift",
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      let query = supabase
+        .from("shifts")
+        .select("*", { count: "exact" })
+        .order("status", { ascending: false })
+        .order("opened_at", { ascending: false })
+        .range(shiftPage * SHIFT_PAGE_SIZE, shiftPage * SHIFT_PAGE_SIZE + SHIFT_PAGE_SIZE - 1);
+      if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      const { data, error, count } = await query;
+      if (error) throw error;
+      return { rows: (data ?? []) as ShiftRow[], count: count ?? 0 };
+    },
+  });
+  const shiftRows = shiftPageData?.rows ?? [];
+  const shiftCount = shiftPageData?.count ?? 0;
+  const shiftIds = shiftRows.map((shift) => shift.id);
+
+  const { data: shiftTransactions = [], isLoading: isLoadingShiftTransactions } = useQuery({
+    queryKey: ["audit-shift-feed-transactions", shiftIds, type, category, paymentMethod, order],
+    enabled: viewMode === "shift" && shiftIds.length > 0,
+    queryFn: async () => {
+      let query = supabase
+        .from("transactions")
+        .select("*")
+        .in("shift_id", shiftIds)
+        .order("created_at", { ascending: order === "asc" });
+      if (type !== ALL) query = query.eq("transaction_type", type);
+      if (category === "Upgrade") {
+        query = query.eq("description", UPGRADE_DESCRIPTION_MARKER);
+      } else if (category === "Renovação") {
+        query = query
+          .eq("category", category)
+          .or(`description.is.null,description.neq.${UPGRADE_DESCRIPTION_MARKER}`);
+      } else if (category !== ALL) {
+        query = query.eq("category", category);
+      }
+      if (paymentMethod !== ALL) query = query.eq("payment_method", paymentMethod);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as TransactionRow[];
+    },
+  });
+
+  const transactionsByShift = new Map<string, TransactionRow[]>();
+  for (const t of shiftTransactions) {
+    const list = transactionsByShift.get(t.shift_id) ?? [];
+    list.push(t);
+    transactionsByShift.set(t.shift_id, list);
+  }
+  const shiftBlocks = shiftRows
+    .map((shift) => ({ shift, transactions: transactionsByShift.get(shift.id) ?? [] }))
+    .filter((block) => block.shift.status === "open" || block.transactions.length > 0);
+
+  const footerCount = viewMode === "shift" ? shiftCount : count;
+  const footerPage = viewMode === "shift" ? shiftPage : page;
+  const footerPageSize = viewMode === "shift" ? SHIFT_PAGE_SIZE : PAGE_SIZE;
+  const setFooterPage = viewMode === "shift" ? setShiftPage : setPage;
+
   function handleExport() {
     const csv = toCSV(
       [
