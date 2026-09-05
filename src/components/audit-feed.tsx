@@ -27,7 +27,11 @@ import { downloadCSV, toCSV } from "@/lib/csv";
 import { friendlyError } from "@/lib/errors";
 import { archiveEmptyOpening, correctOpeningOnServer } from "@/lib/opening-admin.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
+import {
+  useAuditorReferences,
+  type ShiftRow,
+  type TransactionRow,
+} from "@/hooks/use-auditor-data";
 import type { CashQuantities } from "@/lib/cash";
 import {
   displayedIncomeCategory,
@@ -47,6 +51,7 @@ const CATEGORIES = [
   "Sangria",
 ] as const;
 const PAGE_SIZE = 25;
+const SHIFT_PAGE_SIZE = 10;
 type CategoryFilter = (typeof CATEGORIES)[number] | typeof ALL;
 type PaymentFilter = (typeof PAYMENT_METHODS)[number] | typeof ALL;
 
