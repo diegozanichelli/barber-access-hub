@@ -586,11 +586,22 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                   (t) => t.transaction_type === "income" && t.payment_method !== "Dinheiro",
                 )
                 .reduce((sum, t) => sum + Number(t.amount), 0);
+              // O troco em dinheiro já está embutido na venda (lançada pelo valor
+              // real), então não é uma saída de caixa. O troco devolvido via Pix
+              // deixa a sobra em espécie na gaveta.
               const expenseTotal = transactions
-                .filter((t) => t.transaction_type !== "income")
+                .filter((t) => t.transaction_type !== "income" && t.category !== "Troco")
+                .reduce((sum, t) => sum + Number(t.amount), 0);
+              const pixChangeTotal = transactions
+                .filter(
+                  (t) =>
+                    t.transaction_type !== "income" &&
+                    t.category === "Troco" &&
+                    t.payment_method === "Pix",
+                )
                 .reduce((sum, t) => sum + Number(t.amount), 0);
               const openingTotal = Number(shift.actual_opening_total ?? 0);
-              const cashTotal = openingTotal + cashIncomeTotal - expenseTotal;
+              const cashTotal = openingTotal + cashIncomeTotal + pixChangeTotal - expenseTotal;
               const isOpen = shift.status === "open";
               return (
                 <section
