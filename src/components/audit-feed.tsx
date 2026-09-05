@@ -637,6 +637,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Abertura {formatBRL(openingTotal)} + Dinheiro {formatBRL(cashIncomeTotal)}
+                      {pixChangeTotal > 0 ? ` + Troco via Pix ${formatBRL(pixChangeTotal)}` : ""}
                       {nonCashIncomeTotal > 0
                         ? ` · Outras entradas ${formatBRL(nonCashIncomeTotal)}`
                         : ""}
