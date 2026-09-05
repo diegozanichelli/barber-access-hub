@@ -560,12 +560,74 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         </div>
       ) : null}
 
-      {rows.length === 0 ? (
+      {viewMode === "shift" ? (
+        shiftBlocks.length === 0 ? (
+          <p className="mt-6 text-sm text-muted-foreground">Nenhum turno encontrado.</p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {shiftBlocks.map(({ shift, transactions }) => {
+              const incomeTotal = transactions
+                .filter((t) => t.transaction_type === "income")
+                .reduce((sum, t) => sum + Number(t.amount), 0);
+              const expenseTotal = transactions
+                .filter((t) => t.transaction_type !== "income")
+                .reduce((sum, t) => sum + Number(t.amount), 0);
+              const isOpen = shift.status === "open";
+              return (
+                <section
+                  key={shift.id}
+                  className={`rounded-lg border p-3 ${
+                    isOpen ? "border-primary/40 bg-primary/5" : "border-border/60"
+                  }`}
+                >
+                  <header className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="flex flex-wrap items-center gap-2 font-medium">
+                        {references.unitNames[shift.unit_id] ?? "Unidade"}
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                            isOpen
+                              ? "bg-primary/15 text-primary"
+                              : shift.status === "disputed"
+                                ? "bg-destructive/15 text-destructive"
+                                : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {isOpen
+                            ? "Turno aberto"
+                            : shift.status === "disputed"
+                              ? "Com divergência"
+                              : "Fechado"}
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Aberto em {new Date(shift.opened_at).toLocaleString("pt-BR")} por{" "}
+                        {references.names[shift.opened_by] ?? "Usuário"}
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Entradas {formatBRL(incomeTotal)} · Saídas {formatBRL(expenseTotal)} · Saldo{" "}
+                      {formatBRL(incomeTotal - expenseTotal)}
+                    </p>
+                  </header>
+                  {transactions.length === 0 ? (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Nenhum lançamento neste turno.
+                    </p>
+                  ) : (
+                    <ul className="mt-2 divide-y divide-border/60">
+                      {transactions.map(renderTransactionRow)}
+                    </ul>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        )
+      ) : rows.length === 0 ? (
         <p className="mt-6 text-sm text-muted-foreground">Nenhum lançamento encontrado.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-border/60">
-          {rows.map(renderTransactionRow)}
-        </ul>
+        <ul className="mt-4 divide-y divide-border/60">{rows.map(renderTransactionRow)}</ul>
       )}
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
         <p className="text-xs text-muted-foreground">
