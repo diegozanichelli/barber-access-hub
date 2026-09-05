@@ -641,24 +641,24 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       )}
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
         <p className="text-xs text-muted-foreground">
-          {count === 0
+          {footerCount === 0
             ? "0 resultados"
-            : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, count)} de ${count}`}
+            : `${footerPage * footerPageSize + 1}–${Math.min((footerPage + 1) * footerPageSize, footerCount)} de ${footerCount}`}
         </p>
         <div className="flex gap-2">
           <Button
             size="sm"
             variant="secondary"
-            disabled={page === 0}
-            onClick={() => setPage((p) => p - 1)}
+            disabled={footerPage === 0}
+            onClick={() => setFooterPage((p) => p - 1)}
           >
             <ChevronLeft className="size-4" /> Anterior
           </Button>
           <Button
             size="sm"
             variant="secondary"
-            disabled={(page + 1) * PAGE_SIZE >= count}
-            onClick={() => setPage((p) => p + 1)}
+            disabled={(footerPage + 1) * footerPageSize >= footerCount}
+            onClick={() => setFooterPage((p) => p + 1)}
           >
             Próxima <ChevronRight className="size-4" />
           </Button>
