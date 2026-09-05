@@ -88,7 +88,7 @@ async function expectedOpeningTotal(supabase: SupabaseClient<Database>, unitId: 
 
   const { data: transactions, error: transactionsError } = await supabase
     .from("transactions")
-    .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
+    .select("transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at")
     .eq("shift_id", previous.id);
   if (transactionsError) throw transactionsError;
 
@@ -139,7 +139,7 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
           context.supabase
             .from("transactions")
             .select(
-              "transaction_type, payment_method, amount, reverses_transaction_id, reversed_at",
+              "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
             )
             .eq("shift_id", data.shiftId),
         ]);
@@ -298,7 +298,7 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
           .maybeSingle(),
         context.supabase
           .from("transactions")
-          .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
+          .select("transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at")
           .eq("shift_id", data.shiftId),
       ]);
     if (shiftError) throw shiftError;
@@ -307,22 +307,8 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
       throw new Error("Este turno já foi fechado. Atualize a tela.");
 
     const total = calculateTotal(data.quantities as CashQuantities);
-    const expected =
-      Math.round(
-        ((transactions ?? []).reduce((running, transaction) => {
-          if (transaction.reverses_transaction_id || transaction.reversed_at) return running;
-          const amount = Number(transaction.amount);
-          if (
-            transaction.transaction_type === "income" &&
-            transaction.payment_method === "Dinheiro"
-          ) {
-            return running + amount;
-          }
-          return transaction.transaction_type === "income" ? running : running - amount;
-        }, Number(shift.actual_opening_total)) +
-          Number.EPSILON) *
-          100,
-      ) / 100;
+    const expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
+
 
     const legacyClient = context.supabase as unknown as {
       rpc: (name: "close_shift", args: Record<string, unknown>) => RpcResult;
