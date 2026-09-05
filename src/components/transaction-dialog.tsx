@@ -25,6 +25,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import {
+  CHANGE_METHODS,
+  computeChange,
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
   expenseSchema,
@@ -37,6 +39,7 @@ import {
   safeDropSchema,
   uploadReceipt,
   UPGRADE_DESCRIPTION_MARKER,
+  type ChangeMethod,
   type IncomeCategory,
   type PaymentMethod,
 } from "@/lib/transactions";
@@ -174,6 +177,29 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         } else if (insertError) {
           throw insertError;
         }
+        if (changeValue > 0) {
+          if (changeMethod === "Pix" && !changeFile) {
+            throw new Error("Anexe o comprovante do Pix do troco.");
+          }
+          const changePhoto = changeFile
+            ? await uploadReceipt(changeFile, unitId, shiftId)
+            : null;
+          const { error: changeError } = await supabase.from("transactions").insert({
+            shift_id: shiftId,
+            unit_id: unitId,
+            user_id: userId,
+            transaction_type: "expense",
+            category: "Troco",
+            payment_method: changeMethod,
+            client_name: clientName.trim() || null,
+            amount: changeValue,
+            description: `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`,
+            photo_url: changePhoto,
+            // O troco por Pix é uma saída da conta, não uma entrada a conferir.
+            pix_status: "paid",
+          });
+          if (changeError) throw changeError;
+        }
         return parsedRows.reduce((s, r) => s + r.amount, 0);
       }
 
@@ -230,7 +256,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     onError: (err: Error) => setError(friendlyError(err)),
   });
 
-  const blocked = photoRequired && !file;
+  const blocked =
+    (photoRequired && !file) || (changePhotoRequired && !changeFile) || changeInvalid;
 
   const title = isIncome
     ? "Registrar Entrada"
