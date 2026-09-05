@@ -582,6 +582,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
               const expenseTotal = transactions
                 .filter((t) => t.transaction_type !== "income")
                 .reduce((sum, t) => sum + Number(t.amount), 0);
+              const openingTotal = Number(shift.actual_opening_total ?? 0);
+              const shiftTotal = openingTotal + incomeTotal - expenseTotal;
               const isOpen = shift.status === "open";
               return (
                 <section
@@ -616,8 +618,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Entradas {formatBRL(incomeTotal)} · Saídas {formatBRL(expenseTotal)} · Saldo{" "}
-                      {formatBRL(incomeTotal - expenseTotal)}
+                      Abertura {formatBRL(openingTotal)} + Entradas {formatBRL(incomeTotal)} −
+                      Saídas {formatBRL(expenseTotal)} = {formatBRL(shiftTotal)}
                     </p>
                   </header>
                   {transactions.length === 0 ? (
