@@ -342,7 +342,88 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     downloadCSV(`lancamentos-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
-  if (isLoading || !references) {
+  function renderTransactionRow(t: TransactionRow) {
+    const displayedCategory = displayedIncomeCategory(t.category, t.description);
+    const income = t.transaction_type === "income";
+    const safeDrop = t.category === "Sangria";
+    const receiptRequired = t.payment_method === "Pix" || !income;
+    const isReversal = Boolean(t.reverses_transaction_id);
+    const wasReversed = Boolean(t.reversed_at);
+    return (
+      <li key={t.id} className="flex items-start gap-3 py-4">
+        <ReceiptThumb
+          path={t.photo_url}
+          alt={`Comprovante · ${displayedCategory} · ${formatBRL(t.amount)}`}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className="flex min-w-0 items-center gap-2 truncate font-medium">
+              {safeDrop ? (
+                <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
+                  Sangria · Cofre
+                </span>
+              ) : null}
+              {isReversal || wasReversed ? (
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {isReversal ? "Estorno" : "Estornado"}
+                </span>
+              ) : null}
+              <span className="truncate">
+                {displayedCategory}
+                {t.client_name ? ` · ${t.client_name}` : ""}
+              </span>
+            </p>
+            <span
+              className={`shrink-0 font-semibold ${income ? "text-primary" : safeDrop ? "text-warning" : "text-destructive"}`}
+            >
+              {income ? "+" : "-"}
+              {formatBRL(t.amount)}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {references?.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
+            {t.payment_method ?? (safeDrop ? "Transferência para o cofre" : "Despesa")} ·{" "}
+            {references?.names[t.user_id] ?? "Usuário"} ·{" "}
+            {new Date(t.created_at).toLocaleString("pt-BR")}
+          </p>
+          {t.description && t.description !== UPGRADE_DESCRIPTION_MARKER ? (
+            <p className="mt-1 text-sm text-muted-foreground">{t.description}</p>
+          ) : null}
+          {!t.photo_url && receiptRequired ? (
+            <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
+          ) : null}
+          {!isReversal && !wasReversed ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setPendingReversal(t)}>
+                <Undo2 className="size-4" /> Estornar erro
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() =>
+                  setDeleteTarget({
+                    kind: "transaction",
+                    id: t.id,
+                    label: `${displayedCategory}${t.client_name ? ` · ${t.client_name}` : ""}`,
+                    amount: t.amount,
+                    createdAt: t.created_at,
+                  })
+                }
+              >
+                Excluir definitivamente
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </li>
+    );
+  }
+
+  if (
+    isLoading ||
+    !references ||
+    (viewMode === "shift" && (isLoadingShifts || isLoadingShiftTransactions))
+  ) {
     return (
       <section className="surface-panel flex justify-center p-5">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
