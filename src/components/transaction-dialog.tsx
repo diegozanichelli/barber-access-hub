@@ -68,7 +68,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [changeFile, setChangeFile] = useState<File | null>(null);
+  
   const [cashReceived, setCashReceived] = useState("");
   const [changeMethod, setChangeMethod] = useState<ChangeMethod>("Dinheiro");
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +84,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   );
   const hasCash = payments.some((p) => p.method === "Dinheiro");
   const hasPix = payments.some((p) => p.method === "Pix");
-  const photoRequired = isIncome ? hasPix : true;
-
   const cashAmount = parsedPayments
     .filter((p) => p.method === "Dinheiro" && Number.isFinite(p.value))
     .reduce((sum, p) => sum + p.value, 0);
@@ -96,7 +94,9 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     hasCash &&
     cashReceived.trim() !== "" &&
     (!Number.isFinite(receivedValue) || receivedValue < cashAmount);
-  const changePhotoRequired = isIncome && changeValue > 0 && changeMethod === "Pix";
+  const changeIsPix = isIncome && changeValue > 0 && changeMethod === "Pix";
+  // O troco em Pix reaproveita o comprovante principal — sem segunda caixa de foto.
+  const photoRequired = isIncome ? hasPix || changeIsPix : true;
 
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
@@ -108,7 +108,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     setAmount("");
     setDescription("");
     setFile(null);
-    setChangeFile(null);
     setCashReceived("");
     setChangeMethod("Dinheiro");
     setError(null);
@@ -140,7 +139,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         });
 
         if (photoRequired && !file) {
-          throw new Error("O comprovante é obrigatório para pagamentos via Pix.");
+          throw new Error("O comprovante é obrigatório para pagamentos e trocos via Pix.");
         }
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
@@ -178,12 +177,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           throw insertError;
         }
         if (changeValue > 0) {
-          if (changeMethod === "Pix" && !changeFile) {
-            throw new Error("Anexe o comprovante do Pix do troco.");
-          }
-          const changePhoto = changeFile
-            ? await uploadReceipt(changeFile, unitId, shiftId)
-            : null;
           const { error: changeError } = await supabase.from("transactions").insert({
             shift_id: shiftId,
             unit_id: unitId,
@@ -194,7 +187,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
             client_name: clientName.trim() || null,
             amount: changeValue,
             description: `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`,
-            photo_url: changePhoto,
+            // Troco em Pix reaproveita o comprovante principal já enviado acima.
+            photo_url: changeMethod === "Pix" ? photoPath : null,
             // O troco por Pix é uma saída da conta, não uma entrada a conferir.
             pix_status: "paid",
           });
@@ -256,8 +250,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     onError: (err: Error) => setError(friendlyError(err)),
   });
 
-  const blocked =
-    (photoRequired && !file) || (changePhotoRequired && !changeFile) || changeInvalid;
+  const blocked = (photoRequired && !file) || changeInvalid;
 
   const title = isIncome
     ? "Registrar Entrada"
@@ -448,19 +441,11 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                               ))}
                             </SelectContent>
                           </Select>
-                          {changeMethod === "Pix" ? (
-                            <ReceiptUpload
-                              file={changeFile}
-                              onChange={setChangeFile}
-                              required
-                              label="Foto do comprovante do Pix do troco"
-                            />
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              O troco em dinheiro sai da gaveta: fica registrado, mas o saldo
-                              esperado continua o valor da venda.
-                            </p>
-                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {changeMethod === "Pix"
+                              ? "Anexe abaixo o comprovante do Pix do troco (obrigatório) — é a mesma foto do comprovante da venda."
+                              : "O troco em dinheiro sai da gaveta: fica registrado, mas o saldo esperado continua o valor da venda."}
+                          </p>
                         </>
                       ) : null}
                     </div>
