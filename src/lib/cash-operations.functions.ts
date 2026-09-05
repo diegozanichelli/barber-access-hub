@@ -88,7 +88,7 @@ async function expectedOpeningTotal(supabase: SupabaseClient<Database>, unitId: 
 
   const { data: transactions, error: transactionsError } = await supabase
     .from("transactions")
-    .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
+    .select("transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at")
     .eq("shift_id", previous.id);
   if (transactionsError) throw transactionsError;
 
@@ -139,7 +139,7 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
           context.supabase
             .from("transactions")
             .select(
-              "transaction_type, payment_method, amount, reverses_transaction_id, reversed_at",
+              "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
             )
             .eq("shift_id", data.shiftId),
         ]);
@@ -298,7 +298,7 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
           .maybeSingle(),
         context.supabase
           .from("transactions")
-          .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
+          .select("transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at")
           .eq("shift_id", data.shiftId),
       ]);
     if (shiftError) throw shiftError;
