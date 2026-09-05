@@ -66,6 +66,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentFilter>(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(0);
+  const [viewMode, setViewMode] = useState<"shift" | "list">("shift");
+  const [shiftPage, setShiftPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
   const [reversalReason, setReversalReason] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<
@@ -82,6 +84,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   } | null>(null);
 
   useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order]);
+  useEffect(() => setShiftPage(0), [unitId]);
   useEffect(() => {
     if (selectedUnitId) setUnitId(selectedUnitId);
   }, [selectedUnitId]);
