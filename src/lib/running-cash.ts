@@ -35,6 +35,10 @@ export function computeRunningCash(
     const amount = Number(t.amount ?? 0);
     if (t.transaction_type === "income") {
       if (t.payment_method === "Dinheiro") total += amount;
+    } else if (t.category === "Troco") {
+      // Troco em dinheiro já está embutido na venda (a venda foi lançada pelo
+      // valor real). Troco devolvido via Pix deixa a sobra em espécie na gaveta.
+      if (t.payment_method === "Pix") total += amount;
     } else {
       total -= amount;
     }
