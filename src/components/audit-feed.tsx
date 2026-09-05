@@ -441,7 +441,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
         <Select value={unitId} onValueChange={setUnitId}>
           <SelectTrigger aria-label="Filtrar por unidade">
             <SelectValue placeholder="Unidade" />
@@ -505,6 +505,16 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
           <SelectContent>
             <SelectItem value="desc">Mais recentes primeiro</SelectItem>
             <SelectItem value="asc">Mais antigos primeiro</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={viewMode} onValueChange={(v) => setViewMode(v as "shift" | "list")}>
+          <SelectTrigger aria-label="Modo de visualização">
+            <SelectValue placeholder="Visualização" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="shift">Por turno</SelectItem>
+            <SelectItem value="list">Lista simples</SelectItem>
           </SelectContent>
         </Select>
       </div>
