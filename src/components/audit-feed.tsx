@@ -576,14 +576,21 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         ) : (
           <div className="mt-4 space-y-4">
             {shiftBlocks.map(({ shift, transactions }) => {
-              const incomeTotal = transactions
-                .filter((t) => t.transaction_type === "income")
+              const cashIncomeTotal = transactions
+                .filter(
+                  (t) => t.transaction_type === "income" && t.payment_method === "Dinheiro",
+                )
+                .reduce((sum, t) => sum + Number(t.amount), 0);
+              const nonCashIncomeTotal = transactions
+                .filter(
+                  (t) => t.transaction_type === "income" && t.payment_method !== "Dinheiro",
+                )
                 .reduce((sum, t) => sum + Number(t.amount), 0);
               const expenseTotal = transactions
                 .filter((t) => t.transaction_type !== "income")
                 .reduce((sum, t) => sum + Number(t.amount), 0);
               const openingTotal = Number(shift.actual_opening_total ?? 0);
-              const shiftTotal = openingTotal + incomeTotal - expenseTotal;
+              const cashTotal = openingTotal + cashIncomeTotal - expenseTotal;
               const isOpen = shift.status === "open";
               return (
                 <section
@@ -618,8 +625,11 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Abertura {formatBRL(openingTotal)} + Entradas {formatBRL(incomeTotal)} −
-                      Saídas {formatBRL(expenseTotal)} = {formatBRL(shiftTotal)}
+                      Abertura {formatBRL(openingTotal)} + Dinheiro {formatBRL(cashIncomeTotal)}
+                      {nonCashIncomeTotal > 0
+                        ? ` · Outras entradas ${formatBRL(nonCashIncomeTotal)}`
+                        : ""}
+                      {" "}− Saídas {formatBRL(expenseTotal)} = {formatBRL(cashTotal)}
                     </p>
                   </header>
                   {transactions.length === 0 ? (
