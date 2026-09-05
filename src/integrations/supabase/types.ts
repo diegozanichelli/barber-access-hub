@@ -443,6 +443,9 @@ export type Database = {
           id: string
           payment_method: Database["public"]["Enums"]["payment_method"] | null
           photo_url: string | null
+          pix_reviewed_at: string | null
+          pix_reviewed_by: string | null
+          pix_status: string | null
           reversed_at: string | null
           reversed_by: string | null
           reverses_transaction_id: string | null
@@ -460,6 +463,9 @@ export type Database = {
           id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           photo_url?: string | null
+          pix_reviewed_at?: string | null
+          pix_reviewed_by?: string | null
+          pix_status?: string | null
           reversed_at?: string | null
           reversed_by?: string | null
           reverses_transaction_id?: string | null
@@ -477,6 +483,9 @@ export type Database = {
           id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           photo_url?: string | null
+          pix_reviewed_at?: string | null
+          pix_reviewed_by?: string | null
+          pix_status?: string | null
           reversed_at?: string | null
           reversed_by?: string | null
           reverses_transaction_id?: string | null
@@ -665,6 +674,10 @@ export type Database = {
         Args: { _reason: string; _transaction_id: string }
         Returns: string
       }
+      review_pix_transaction: {
+        Args: { _transaction_id: string }
+        Returns: undefined
+      }
       shift_expected_cash: { Args: { _shift_id: string }; Returns: number }
       unit_expected_opening_total: {
         Args: { _unit_id: string }
@@ -689,6 +702,7 @@ export type Database = {
         | "Upgrade"
         | "Serviços"
         | "Produtos"
+        | "Troco"
       withdrawal_status: "pending" | "approved" | "disputed"
     }
     CompositeTypes: {
@@ -829,6 +843,7 @@ export const Constants = {
         "Upgrade",
         "Serviços",
         "Produtos",
+        "Troco",
       ],
       withdrawal_status: ["pending", "approved", "disputed"],
     },
