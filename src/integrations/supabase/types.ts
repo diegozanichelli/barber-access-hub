@@ -563,6 +563,10 @@ export type Database = {
     }
     Functions: {
       cash_total: { Args: { _q: Json }; Returns: number }
+      check_shift_cash_count: {
+        Args: { _quantities: Json; _shift_id: string }
+        Returns: boolean
+      }
       close_shift: {
         Args: { _notes?: string; _quantities: Json; _shift_id: string }
         Returns: Json

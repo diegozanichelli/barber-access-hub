@@ -129,6 +129,15 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
 
       expected = await expectedOpeningTotal(context.supabase, data.unitId);
     } else if (data.mode === "closing") {
+      const centralCheck = await context.supabase.rpc("check_shift_cash_count", {
+        _shift_id: data.shiftId,
+        _quantities: data.quantities,
+      });
+      if (!centralCheck.error) return { matches: Boolean(centralCheck.data) };
+      if (!isMissingRpc(centralCheck.error)) throw centralCheck.error;
+
+      // Compatibility fallback while the centralized database check is being
+      // published. It mirrors shift_expected_cash exactly.
       const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
         await Promise.all([
           context.supabase
