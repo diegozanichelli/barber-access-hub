@@ -68,7 +68,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  
+
   const [cashReceived, setCashReceived] = useState("");
   const [changeMethod, setChangeMethod] = useState<ChangeMethod>("Dinheiro");
   const [error, setError] = useState<string | null>(null);

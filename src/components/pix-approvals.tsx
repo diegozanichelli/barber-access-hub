@@ -56,7 +56,8 @@ export function PixApprovals({ unitId }: { unitId?: string }) {
       void queryClient.invalidateQueries({ queryKey: ["pix-approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
     },
-    onError: (err: Error) => toast.error("Não foi possível confirmar", { description: friendlyError(err) }),
+    onError: (err: Error) =>
+      toast.error("Não foi possível confirmar", { description: friendlyError(err) }),
   });
 
   return (
@@ -81,10 +82,7 @@ export function PixApprovals({ unitId }: { unitId?: string }) {
       ) : (
         <ul className="mt-4 space-y-3">
           {(pending ?? []).map((tx) => (
-            <li
-              key={tx.id}
-              className="flex gap-3 rounded-lg border border-border/60 p-3"
-            >
+            <li key={tx.id} className="flex gap-3 rounded-lg border border-border/60 p-3">
               <ReceiptThumb path={tx.photo_url} alt={`Comprovante Pix ${formatBRL(tx.amount)}`} />
               <div className="min-w-0 flex-1">
                 <p className="text-lg font-semibold text-primary">{formatBRL(Number(tx.amount))}</p>

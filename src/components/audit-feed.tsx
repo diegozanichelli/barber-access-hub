@@ -27,11 +27,7 @@ import { downloadCSV, toCSV } from "@/lib/csv";
 import { friendlyError } from "@/lib/errors";
 import { archiveEmptyOpening, correctOpeningOnServer } from "@/lib/opening-admin.functions";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  useAuditorReferences,
-  type ShiftRow,
-  type TransactionRow,
-} from "@/hooks/use-auditor-data";
+import { useAuditorReferences, type ShiftRow, type TransactionRow } from "@/hooks/use-auditor-data";
 import type { CashQuantities } from "@/lib/cash";
 import {
   displayedIncomeCategory,
@@ -577,14 +573,10 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
           <div className="mt-4 space-y-4">
             {shiftBlocks.map(({ shift, transactions }) => {
               const cashIncomeTotal = transactions
-                .filter(
-                  (t) => t.transaction_type === "income" && t.payment_method === "Dinheiro",
-                )
+                .filter((t) => t.transaction_type === "income" && t.payment_method === "Dinheiro")
                 .reduce((sum, t) => sum + Number(t.amount), 0);
               const nonCashIncomeTotal = transactions
-                .filter(
-                  (t) => t.transaction_type === "income" && t.payment_method !== "Dinheiro",
-                )
+                .filter((t) => t.transaction_type === "income" && t.payment_method !== "Dinheiro")
                 .reduce((sum, t) => sum + Number(t.amount), 0);
               // O troco em dinheiro já está embutido na venda (lançada pelo valor
               // real), então não é uma saída de caixa. O troco devolvido via Pix
@@ -640,8 +632,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                       {pixChangeTotal > 0 ? ` + Troco via Pix ${formatBRL(pixChangeTotal)}` : ""}
                       {nonCashIncomeTotal > 0
                         ? ` · Outras entradas ${formatBRL(nonCashIncomeTotal)}`
-                        : ""}
-                      {" "}− Saídas {formatBRL(expenseTotal)} = {formatBRL(cashTotal)}
+                        : ""}{" "}
+                      − Saídas {formatBRL(expenseTotal)} = {formatBRL(cashTotal)}
                     </p>
                   </header>
                   {transactions.length === 0 ? (
