@@ -88,7 +88,9 @@ async function expectedOpeningTotal(supabase: SupabaseClient<Database>, unitId: 
 
   const { data: transactions, error: transactionsError } = await supabase
     .from("transactions")
-    .select("transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at")
+    .select(
+      "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
+    )
     .eq("shift_id", previous.id);
   if (transactionsError) throw transactionsError;
 
@@ -307,7 +309,9 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
           .maybeSingle(),
         context.supabase
           .from("transactions")
-          .select("transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at")
+          .select(
+            "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
+          )
           .eq("shift_id", data.shiftId),
       ]);
     if (shiftError) throw shiftError;
@@ -317,7 +321,6 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
 
     const total = calculateTotal(data.quantities as CashQuantities);
     const expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
-
 
     const legacyClient = context.supabase as unknown as {
       rpc: (name: "close_shift", args: Record<string, unknown>) => RpcResult;
