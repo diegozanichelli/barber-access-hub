@@ -26,12 +26,14 @@ import { formatBRL } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import {
   CHANGE_METHODS,
-  computeChange,
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
+  allocateComandaRows,
+  clientNameSchema,
+  comandaItemSchema,
+  comandaPaymentSchema,
+  computeChange,
   expenseSchema,
-  incomePhotoRequired,
-  incomeSchema,
   isMissingCategoryEnum,
   isMissingUpgradeEnum,
   isRoundAmount,
@@ -40,6 +42,8 @@ import {
   uploadReceipt,
   UPGRADE_DESCRIPTION_MARKER,
   type ChangeMethod,
+  type ComandaItem,
+  type ComandaPayment,
   type IncomeCategory,
   type PaymentMethod,
 } from "@/lib/transactions";
@@ -55,14 +59,19 @@ type Props = {
 };
 
 type PaymentRow = { id: string; method: PaymentMethod | ""; amount: string };
+type ItemRow = { id: string; category: IncomeCategory | ""; amount: string };
 
 function newRow(): PaymentRow {
   return { id: crypto.randomUUID(), method: "", amount: "" };
 }
 
+function newItem(): ItemRow {
+  return { id: crypto.randomUUID(), category: "", amount: "" };
+}
+
 export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId }: Props) {
   const queryClient = useQueryClient();
-  const [category, setCategory] = useState<IncomeCategory | "">("");
+  const [items, setItems] = useState<ItemRow[]>([newItem()]);
   const [clientName, setClientName] = useState("");
   const [payments, setPayments] = useState<PaymentRow[]>([newRow()]);
   const [amount, setAmount] = useState("");
@@ -77,8 +86,17 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const isExpense = type === "expense";
   const isSafeDrop = type === "safe_drop";
 
+  const parsedItems = items.map((i) => ({ ...i, value: parseAmount(i.amount) }));
+  const itemsTotal = parsedItems.reduce(
+    (sum, i) => sum + (Number.isFinite(i.value) ? i.value : 0),
+    0,
+  );
+  const hasValidItems = parsedItems.some(
+    (i) => i.category !== "" && Number.isFinite(i.value) && i.value > 0,
+  );
+
   const parsedPayments = payments.map((p) => ({ ...p, value: parseAmount(p.amount) }));
-  const splitTotal = parsedPayments.reduce(
+  const paidTotal = parsedPayments.reduce(
     (sum, p) => sum + (Number.isFinite(p.value) ? p.value : 0),
     0,
   );
@@ -98,11 +116,15 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   // O troco em Pix reaproveita o comprovante principal — sem segunda caixa de foto.
   const photoRequired = isIncome ? hasPix || changeIsPix : true;
 
+  // O pagamento precisa fechar com o total da comanda (soma dos itens).
+  const paymentsMatch = Math.abs(paidTotal - itemsTotal) < 0.005;
+  const paymentDiff = Math.round((paidTotal - itemsTotal) * 100) / 100;
+
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
 
   function reset() {
-    setCategory("");
+    setItems([newItem()]);
     setClientName("");
     setPayments([newRow()]);
     setAmount("");
@@ -116,66 +138,107 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const mutation = useMutation({
     mutationFn: async () => {
       if (isIncome) {
-        const rows = parsedPayments.filter((p) => p.method !== "" || p.amount.trim() !== "");
-        if (rows.length === 0) throw new Error("Informe ao menos uma forma de pagamento.");
+        const nameParsed = clientNameSchema.safeParse(clientName);
+        if (!nameParsed.success) {
+          throw new Error(nameParsed.error.issues[0]?.message ?? "Informe o nome do cliente.");
+        }
 
-        const methods = rows.map((p) => p.method);
+        const filledItems = parsedItems.filter((i) => i.category !== "" || i.amount.trim() !== "");
+        if (filledItems.length === 0) {
+          throw new Error("Adicione ao menos um item à comanda.");
+        }
+        const validItems: ComandaItem[] = filledItems.map((i) => {
+          if (i.category === "") throw new Error("Selecione a categoria de cada item.");
+          const parsed = comandaItemSchema.safeParse({ category: i.category, amount: i.value });
+          if (!parsed.success) {
+            throw new Error(
+              parsed.error.issues[0]?.message ?? "Informe um valor válido para o item.",
+            );
+          }
+          return parsed.data;
+        });
+
+        const paymentRows = parsedPayments.filter((p) => p.method !== "" || p.amount.trim() !== "");
+        if (paymentRows.length === 0) {
+          throw new Error("Informe ao menos uma forma de pagamento.");
+        }
+        const methods = paymentRows.map((p) => p.method);
         if (new Set(methods).size !== methods.length) {
           throw new Error(
             "Você repetiu a mesma forma de pagamento. Some os valores em uma única linha.",
           );
         }
-
-        const parsedRows = rows.map((p) => {
-          const parsed = incomeSchema.safeParse({
-            category,
-            clientName,
-            amount: p.value,
-            paymentMethod: p.method,
-          });
-          if (!parsed.success)
-            throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
+        const validPayments: ComandaPayment[] = paymentRows.map((p) => {
+          if (p.method === "") throw new Error("Selecione a forma de cada pagamento.");
+          const parsed = comandaPaymentSchema.safeParse({ method: p.method, amount: p.value });
+          if (!parsed.success) {
+            throw new Error(
+              parsed.error.issues[0]?.message ?? "Informe um valor válido para o pagamento.",
+            );
+          }
           return parsed.data;
         });
+
+        const itemsSum = validItems.reduce((s, i) => s + i.amount, 0);
+        const paySum = validPayments.reduce((s, p) => s + p.amount, 0);
+        if (Math.abs(itemsSum - paySum) >= 0.005) {
+          throw new Error(
+            `O pagamento (${formatBRL(paySum)}) não confere com o total da comanda (${formatBRL(itemsSum)}).`,
+          );
+        }
 
         if (photoRequired && !file) {
           throw new Error("O comprovante é obrigatório para pagamentos e trocos via Pix.");
         }
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
-        const transactionRows = parsedRows.map((r) => ({
+        const allocated = allocateComandaRows(validItems, validPayments);
+        const transactionRows = allocated.map((r) => ({
           shift_id: shiftId,
           unit_id: unitId,
           user_id: userId,
           transaction_type: "income",
           category: r.category,
           description: r.category === "Upgrade" ? UPGRADE_DESCRIPTION_MARKER : null,
-          client_name: r.clientName,
+          client_name: nameParsed.data,
           payment_method: r.paymentMethod,
           amount: r.amount,
           photo_url: photoPath,
         }));
+
         const { error: insertError } = await supabase.from("transactions").insert(transactionRows);
-        if (insertError && category === "Upgrade" && isMissingUpgradeEnum(insertError)) {
-          const { error: fallbackError } = await supabase.from("transactions").insert(
-            transactionRows.map((row) => ({
-              ...row,
-              category: "Renovação" as const,
-              description: UPGRADE_DESCRIPTION_MARKER,
-            })),
-          );
-          if (fallbackError) throw fallbackError;
-        } else if (
-          insertError &&
-          (category === "Serviços" || category === "Produtos") &&
-          isMissingCategoryEnum(insertError, category)
-        ) {
-          throw new Error(
-            `A categoria ${category} ainda não foi publicada no banco. Aplique as migrations pendentes e tente de novo.`,
-          );
-        } else if (insertError) {
-          throw insertError;
+        if (insertError) {
+          const usesUpgrade = allocated.some((r) => r.category === "Upgrade");
+          if (usesUpgrade && isMissingUpgradeEnum(insertError)) {
+            // O banco ainda não tem o enum Upgrade: grava como Renovação com o
+            // marcador, sem falsear as demais categorias.
+            const fallbackRows = transactionRows.map((row) =>
+              row.category === "Upgrade"
+                ? {
+                    ...row,
+                    category: "Renovação" as const,
+                    description: UPGRADE_DESCRIPTION_MARKER,
+                  }
+                : row,
+            );
+            const { error: fallbackError } = await supabase
+              .from("transactions")
+              .insert(fallbackRows);
+            if (fallbackError) throw fallbackError;
+          } else {
+            const missing = (["Serviços", "Produtos"] as const).find(
+              (c) =>
+                allocated.some((r) => r.category === c) && isMissingCategoryEnum(insertError, c),
+            );
+            if (missing) {
+              throw new Error(
+                `A categoria ${missing} ainda não foi publicada no banco. Aplique as migrations pendentes e tente de novo.`,
+              );
+            }
+            throw insertError;
+          }
         }
+
         if (changeValue > 0) {
           const { error: changeError } = await supabase.from("transactions").insert({
             shift_id: shiftId,
@@ -184,7 +247,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
             transaction_type: "expense",
             category: "Troco",
             payment_method: changeMethod,
-            client_name: clientName.trim() || null,
+            client_name: nameParsed.data,
             amount: changeValue,
             description: `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`,
             // Troco em Pix reaproveita o comprovante principal já enviado acima.
@@ -194,7 +257,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           });
           if (changeError) throw changeError;
         }
-        return parsedRows.reduce((s, r) => s + r.amount, 0);
+        return itemsSum;
       }
 
       if (isSafeDrop) {
@@ -239,7 +302,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     },
     onSuccess: (value) => {
       toast.success(
-        isIncome ? "Entrada registrada" : isSafeDrop ? "Sangria registrada" : "Despesa registrada",
+        isIncome ? "Comanda registrada" : isSafeDrop ? "Sangria registrada" : "Despesa registrada",
         { description: formatBRL(value) },
       );
       void queryClient.invalidateQueries({ queryKey: ["shift-transactions", shiftId] });
@@ -250,7 +313,23 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     onError: (err: Error) => setError(friendlyError(err)),
   });
 
-  const blocked = (photoRequired && !file) || changeInvalid;
+  const incomeBlocked =
+    isIncome && ((photoRequired && !file) || changeInvalid || !hasValidItems || !paymentsMatch);
+  const blocked = isIncome ? incomeBlocked : photoRequired && !file;
+
+  const saveLabel = !isIncome
+    ? blocked
+      ? "Foto obrigatória"
+      : "Salvar"
+    : !hasValidItems
+      ? "Adicione um item"
+      : !paymentsMatch
+        ? "Pagamento não confere"
+        : changeInvalid
+          ? "Confira o troco"
+          : photoRequired && !file
+            ? "Foto obrigatória"
+            : "Salvar comanda";
 
   const title = isIncome
     ? "Registrar Entrada"
@@ -259,7 +338,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
       : "Registrar Despesa";
 
   const descriptionText = isIncome
-    ? "Registre uma venda ou assinatura do caixa aberto. Aceita pagamento misto."
+    ? "Registre a comanda do cliente no caixa aberto. Vários itens e pagamento misto são aceitos."
     : isSafeDrop
       ? "Retirada de dinheiro da gaveta para o cofre. Não é despesa da loja."
       : "Registre uma compra para a loja. A nota fiscal é obrigatória.";
@@ -289,22 +368,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           {isIncome ? (
             <>
               <div className="space-y-2">
-                <Label htmlFor="tx-category">Categoria</Label>
-                <Select value={category} onValueChange={(v) => setCategory(v as IncomeCategory)}>
-                  <SelectTrigger id="tx-category" className="h-12">
-                    <SelectValue placeholder="Selecione a categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INCOME_CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="tx-client">Nome e Sobrenome do Cliente</Label>
                 <Input
                   id="tx-client"
@@ -314,6 +377,92 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                   onChange={(e) => setClientName(e.target.value)}
                   placeholder="João Souza"
                 />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-baseline justify-between">
+                  <Label>Itens da comanda</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {items.length === 1 ? "1 item" : `${items.length} itens`}
+                  </span>
+                </div>
+                {items.map((row, index) => (
+                  <div key={row.id} className="rounded-lg border border-border/60 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Item {index + 1}
+                      </span>
+                      {items.length > 1 ? (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Remover item ${index + 1}`}
+                          onClick={() => setItems((prev) => prev.filter((i) => i.id !== row.id))}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 grid gap-2">
+                      <Select
+                        value={row.category}
+                        onValueChange={(v) =>
+                          setItems((prev) =>
+                            prev.map((i) =>
+                              i.id === row.id ? { ...i, category: v as IncomeCategory } : i,
+                            ),
+                          )
+                        }
+                      >
+                        <SelectTrigger
+                          className="h-12"
+                          aria-label={`Categoria do item ${index + 1}`}
+                        >
+                          <SelectValue placeholder="Selecione a categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INCOME_CATEGORIES.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        className="h-12 text-lg"
+                        inputMode="decimal"
+                        aria-label={`Valor do item ${index + 1}`}
+                        value={row.amount}
+                        onChange={(e) =>
+                          setItems((prev) =>
+                            prev.map((i) =>
+                              i.id === row.id ? { ...i, amount: e.target.value } : i,
+                            ),
+                          )
+                        }
+                        placeholder="0,00"
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full"
+                  onClick={() => setItems((prev) => [...prev, newItem()])}
+                >
+                  <Plus className="size-4" />
+                  Adicionar item
+                </Button>
+
+                <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Total da comanda</span>
+                  <span className="text-lg font-semibold text-primary">
+                    {formatBRL(itemsTotal)}
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -390,17 +539,29 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                 </Button>
 
                 <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
-                  <span className="text-sm text-muted-foreground">Total do atendimento</span>
-                  <span className="text-lg font-semibold text-primary">
-                    {formatBRL(splitTotal)}
-                  </span>
+                  <span className="text-sm text-muted-foreground">Pago</span>
+                  {itemsTotal > 0 && paymentsMatch ? (
+                    <span className="text-sm font-semibold text-primary">
+                      ✓ confere · {formatBRL(paidTotal)}
+                    </span>
+                  ) : itemsTotal > 0 && paymentDiff < 0 ? (
+                    <span className="text-sm font-semibold text-destructive">
+                      faltam {formatBRL(-paymentDiff)}
+                    </span>
+                  ) : itemsTotal > 0 && paymentDiff > 0 ? (
+                    <span className="text-sm font-semibold text-destructive">
+                      sobram {formatBRL(paymentDiff)}
+                    </span>
+                  ) : (
+                    <span className="text-sm font-semibold">{formatBRL(paidTotal)}</span>
+                  )}
                 </div>
 
                 {hasCash ? (
                   <>
                     <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
-                      🚨 ATENÇÃO: Digite acima EXATAMENTE o valor da venda pago em dinheiro. Se o
-                      cliente pagou com nota maior, informe abaixo quanto ele entregou.
+                      🚨 ATENÇÃO: No valor do pagamento em dinheiro digite EXATAMENTE o que entra no
+                      caixa. Se o cliente pagou com nota maior, informe abaixo quanto ele entregou.
                     </p>
 
                     <div className="space-y-2 rounded-lg border border-border/60 p-3">
@@ -524,7 +685,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
 
           <Button type="submit" className="h-12 w-full" disabled={blocked || mutation.isPending}>
             {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-            {blocked ? "Foto obrigatória" : "Salvar"}
+            {saveLabel}
           </Button>
         </form>
       </DialogContent>
