@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ImageIcon, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { PartnerBalances } from "@/components/partner-balances";
 import { Button } from "@/components/ui/button";
 import { useSessionProfile } from "@/hooks/use-session-profile";
 import { supabase } from "@/integrations/supabase/client";
@@ -117,6 +118,8 @@ function PartnerDashboard() {
       title={isLoading ? "Carregando..." : `Bem-vindo Sócio ${profile?.fullName ?? ""}`}
       subtitle="Visão geral da rede"
     >
+      <PartnerBalances />
+
       <section className="surface-panel p-5">
         <h2 className="text-lg">Retiradas pendentes</h2>
         <p className="mt-1 text-sm text-muted-foreground">
