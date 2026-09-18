@@ -163,6 +163,36 @@ export type Database = {
         }
         Relationships: []
       }
+      partner_deposits: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          note: string | null
+          partner_id: string
+          photo_url: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          note?: string | null
+          partner_id: string
+          photo_url?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string | null
+          partner_id?: string
+          photo_url?: string | null
+        }
+        Relationships: []
+      }
       partner_withdrawals: {
         Row: {
           amount: number
@@ -571,6 +601,15 @@ export type Database = {
         Args: { _notes?: string; _quantities: Json; _shift_id: string }
         Returns: Json
       }
+      create_partner_deposit: {
+        Args: {
+          _amount: number
+          _note?: string
+          _partner_id: string
+          _photo_url?: string
+        }
+        Returns: string
+      }
       create_partner_withdrawal:
         | {
             Args: {
@@ -647,6 +686,15 @@ export type Database = {
       open_shift: {
         Args: { _notes?: string; _quantities: Json; _unit_id: string }
         Returns: string
+      }
+      partner_cash_balances: {
+        Args: never
+        Returns: {
+          full_name: string
+          held: number
+          partner_id: string
+          waiting: number
+        }[]
       }
       receive_handover: {
         Args: { _notes?: string; _pending_shift_id: string; _quantities: Json }
