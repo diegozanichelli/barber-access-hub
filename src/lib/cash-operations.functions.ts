@@ -3,7 +3,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
-import { calculateTotal, countMatchesExpected, type CashQuantities } from "@/lib/cash";
+import {
+  calculateTotal,
+  countMatchesExpected,
+  COUNT_TOLERANCE,
+  type CashQuantities,
+} from "@/lib/cash";
 import { computeExpectedClosing } from "@/lib/running-cash";
 
 const quantity = z.number().int().min(0).max(1_000_000);
@@ -401,7 +406,7 @@ export const receiveHandoverOnServer = createServerFn({ method: "POST" })
       shiftId: result.shift_id,
       total,
       expected: Number(result.expected ?? expected),
-      matches: result.matches ?? Math.abs(expected - total) < 0.005,
+      matches: result.matches ?? Math.abs(expected - total) <= COUNT_TOLERANCE + 1e-9,
       mode: "legacy" as const,
     };
   });
