@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AuditFeed } from "@/components/audit-feed";
 import { ChangeRequests } from "@/components/change-requests";
 import { AuditorOverview } from "@/components/auditor-overview";
+import { PartnerBalances } from "@/components/partner-balances";
 import { ShiftHistory } from "@/components/shift-history";
 import { SalesReport } from "@/components/sales-report";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -53,6 +54,7 @@ function AuditorDashboard() {
         <TabsList className="flex h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="feed">Lançamentos</TabsTrigger>
+          <TabsTrigger value="pix">Pix</TabsTrigger>
           <TabsTrigger value="history">Turnos</TabsTrigger>
           <TabsTrigger value="units">Unidades</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
