@@ -3,12 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
-import {
-  calculateTotal,
-  countMatchesExpected,
-  COUNT_TOLERANCE,
-  type CashQuantities,
-} from "@/lib/cash";
+import { calculateTotal, countMatchesExpected, type CashQuantities } from "@/lib/cash";
 import { computeExpectedClosing } from "@/lib/running-cash";
 
 const quantity = z.number().int().min(0).max(1_000_000);
@@ -93,9 +88,7 @@ async function expectedOpeningTotal(supabase: SupabaseClient<Database>, unitId: 
 
   const { data: transactions, error: transactionsError } = await supabase
     .from("transactions")
-    .select(
-      "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
-    )
+    .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
     .eq("shift_id", previous.id);
   if (transactionsError) throw transactionsError;
 
@@ -123,28 +116,8 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
         throw new Error("Você não tem permissão para conferir este caixa.");
       }
 
-      // First opening of a unit (no previous closed shift, e.g. after test
-      // shifts were removed) has no baseline: the count itself is the baseline.
-      const { count: closedShifts, error: closedError } = await context.supabase
-        .from("shifts")
-        .select("id", { count: "exact", head: true })
-        .eq("unit_id", data.unitId)
-        .eq("status", "closed")
-        .not("closing_total", "is", null);
-      if (closedError) throw closedError;
-      if (!closedShifts) return { matches: true };
-
       expected = await expectedOpeningTotal(context.supabase, data.unitId);
     } else if (data.mode === "closing") {
-      const centralCheck = await context.supabase.rpc("check_shift_cash_count", {
-        _shift_id: data.shiftId,
-        _quantities: data.quantities,
-      });
-      if (!centralCheck.error) return { matches: Boolean(centralCheck.data) };
-      if (!isMissingRpc(centralCheck.error)) throw centralCheck.error;
-
-      // Compatibility fallback while the centralized database check is being
-      // published. It mirrors shift_expected_cash exactly.
       const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
         await Promise.all([
           context.supabase
@@ -155,7 +128,7 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
           context.supabase
             .from("transactions")
             .select(
-              "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
+              "transaction_type, payment_method, amount, reverses_transaction_id, reversed_at",
             )
             .eq("shift_id", data.shiftId),
         ]);
@@ -314,9 +287,7 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
           .maybeSingle(),
         context.supabase
           .from("transactions")
-          .select(
-            "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
-          )
+          .select("transaction_type, payment_method, amount, reverses_transaction_id, reversed_at")
           .eq("shift_id", data.shiftId),
       ]);
     if (shiftError) throw shiftError;
@@ -325,7 +296,22 @@ export const closeShiftOnServer = createServerFn({ method: "POST" })
       throw new Error("Este turno já foi fechado. Atualize a tela.");
 
     const total = calculateTotal(data.quantities as CashQuantities);
-    const expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
+    const expected =
+      Math.round(
+        ((transactions ?? []).reduce((running, transaction) => {
+          if (transaction.reverses_transaction_id || transaction.reversed_at) return running;
+          const amount = Number(transaction.amount);
+          if (
+            transaction.transaction_type === "income" &&
+            transaction.payment_method === "Dinheiro"
+          ) {
+            return running + amount;
+          }
+          return transaction.transaction_type === "income" ? running : running - amount;
+        }, Number(shift.actual_opening_total)) +
+          Number.EPSILON) *
+          100,
+      ) / 100;
 
     const legacyClient = context.supabase as unknown as {
       rpc: (name: "close_shift", args: Record<string, unknown>) => RpcResult;
@@ -406,7 +392,7 @@ export const receiveHandoverOnServer = createServerFn({ method: "POST" })
       shiftId: result.shift_id,
       total,
       expected: Number(result.expected ?? expected),
-      matches: result.matches ?? Math.abs(expected - total) <= COUNT_TOLERANCE + 1e-9,
+      matches: result.matches ?? Math.abs(expected - total) < 0.005,
       mode: "legacy" as const,
     };
   });

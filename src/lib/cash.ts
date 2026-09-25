@@ -42,18 +42,8 @@ export function calculateTotal(quantities: CashQuantities): number {
   return Math.round(total * 100) / 100;
 }
 
-/**
- * Diferença máxima aceita entre o contado e o esperado sem acusar divergência.
- * A menor moeda é R$ 0,05, então o contado é sempre múltiplo de 0,05 e nunca
- * bate exatamente um esperado em centavos quebrados (ex.: 203,76). Uma folga de
- * 5 centavos absorve esse arredondamento e a moedinha de 1 centavo que ninguém
- * tem, sem deixar passar diferença que importe. Espelhado no banco em
- * check_shift_cash_count e receive_handover — mudou aqui, mude lá também.
- */
-export const COUNT_TOLERANCE = 0.05;
-
 export function countMatchesExpected(quantities: CashQuantities, expected: number): boolean {
-  return Math.abs(calculateTotal(quantities) - Number(expected)) <= COUNT_TOLERANCE + 1e-9;
+  return Math.abs(calculateTotal(quantities) - Number(expected)) < 0.005;
 }
 
 export function formatBRL(value: number | string | null | undefined): string {
