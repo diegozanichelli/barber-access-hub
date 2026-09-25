@@ -27,27 +27,26 @@ import { downloadCSV, toCSV } from "@/lib/csv";
 import { friendlyError } from "@/lib/errors";
 import { archiveEmptyOpening, correctOpeningOnServer } from "@/lib/opening-admin.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuditorReferences, type ShiftRow, type TransactionRow } from "@/hooks/use-auditor-data";
+import { useAuditorReferences, type TransactionRow } from "@/hooks/use-auditor-data";
 import type { CashQuantities } from "@/lib/cash";
 import {
   displayedIncomeCategory,
   PAYMENT_METHODS,
   UPGRADE_DESCRIPTION_MARKER,
+  PRODUCTS_DESCRIPTION_MARKER,
 } from "@/lib/transactions";
 
 const ALL = "__all__";
 const CATEGORIES = [
   "Bebida",
+  "Produtos",
   "Assinatura Nova",
   "Renovação",
   "Upgrade",
-  "Serviços",
-  "Produtos",
   "Despesa",
   "Sangria",
 ] as const;
 const PAGE_SIZE = 25;
-const SHIFT_PAGE_SIZE = 10;
 type CategoryFilter = (typeof CATEGORIES)[number] | typeof ALL;
 type PaymentFilter = (typeof PAYMENT_METHODS)[number] | typeof ALL;
 
@@ -62,8 +61,6 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentFilter>(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(0);
-  const [viewMode, setViewMode] = useState<"shift" | "list">("shift");
-  const [shiftPage, setShiftPage] = useState(0);
   const [pendingReversal, setPendingReversal] = useState<TransactionRow | null>(null);
   const [reversalReason, setReversalReason] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<
@@ -80,7 +77,6 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   } | null>(null);
 
   useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order]);
-  useEffect(() => setShiftPage(0), [unitId]);
   useEffect(() => {
     if (selectedUnitId) setUnitId(selectedUnitId);
   }, [selectedUnitId]);
@@ -98,7 +94,6 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
         queryClient.invalidateQueries({ queryKey: ["shift-transactions"] }),
-        queryClient.invalidateQueries({ queryKey: ["audit-shift-feed"] }),
       ]);
       toast.success("Lançamento estornado", {
         description:
@@ -201,7 +196,6 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         queryClient.invalidateQueries({ queryKey: ["audit-transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["auditor-data"] }),
         queryClient.invalidateQueries({ queryKey: ["transaction-change-requests"] }),
-        queryClient.invalidateQueries({ queryKey: ["audit-shift-feed"] }),
       ]);
       toast.success("Lançamento excluído", {
         description: "A cópia para auditoria foi preservada.",
@@ -226,10 +220,16 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
       if (type !== ALL) query = query.eq("transaction_type", type);
       if (category === "Upgrade") {
         query = query.eq("description", UPGRADE_DESCRIPTION_MARKER);
+      } else if (category === "Produtos") {
+        query = query.eq("description", PRODUCTS_DESCRIPTION_MARKER);
       } else if (category === "Renovação") {
         query = query
           .eq("category", category)
           .or(`description.is.null,description.neq.${UPGRADE_DESCRIPTION_MARKER}`);
+      } else if (category === "Bebida") {
+        query = query
+          .eq("category", category)
+          .or(`description.is.null,description.neq.${PRODUCTS_DESCRIPTION_MARKER}`);
       } else if (category !== ALL) {
         query = query.eq("category", category);
       }
@@ -241,68 +241,6 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   });
   const rows = pageData?.rows ?? [];
   const count = pageData?.count ?? 0;
-
-  const { data: shiftPageData, isLoading: isLoadingShifts } = useQuery({
-    queryKey: ["audit-shift-feed", shiftPage, unitId],
-    enabled: viewMode === "shift",
-    refetchInterval: 30_000,
-    queryFn: async () => {
-      let query = supabase
-        .from("shifts")
-        .select("*", { count: "exact" })
-        .order("status", { ascending: false })
-        .order("opened_at", { ascending: false })
-        .range(shiftPage * SHIFT_PAGE_SIZE, shiftPage * SHIFT_PAGE_SIZE + SHIFT_PAGE_SIZE - 1);
-      if (unitId !== ALL) query = query.eq("unit_id", unitId);
-      const { data, error, count } = await query;
-      if (error) throw error;
-      return { rows: (data ?? []) as ShiftRow[], count: count ?? 0 };
-    },
-  });
-  const shiftRows = shiftPageData?.rows ?? [];
-  const shiftCount = shiftPageData?.count ?? 0;
-  const shiftIds = shiftRows.map((shift) => shift.id);
-
-  const { data: shiftTransactions = [], isLoading: isLoadingShiftTransactions } = useQuery({
-    queryKey: ["audit-shift-feed-transactions", shiftIds, type, category, paymentMethod, order],
-    enabled: viewMode === "shift" && shiftIds.length > 0,
-    queryFn: async () => {
-      let query = supabase
-        .from("transactions")
-        .select("*")
-        .in("shift_id", shiftIds)
-        .order("created_at", { ascending: order === "asc" });
-      if (type !== ALL) query = query.eq("transaction_type", type);
-      if (category === "Upgrade") {
-        query = query.eq("description", UPGRADE_DESCRIPTION_MARKER);
-      } else if (category === "Renovação") {
-        query = query
-          .eq("category", category)
-          .or(`description.is.null,description.neq.${UPGRADE_DESCRIPTION_MARKER}`);
-      } else if (category !== ALL) {
-        query = query.eq("category", category);
-      }
-      if (paymentMethod !== ALL) query = query.eq("payment_method", paymentMethod);
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []) as TransactionRow[];
-    },
-  });
-
-  const transactionsByShift = new Map<string, TransactionRow[]>();
-  for (const t of shiftTransactions) {
-    const list = transactionsByShift.get(t.shift_id) ?? [];
-    list.push(t);
-    transactionsByShift.set(t.shift_id, list);
-  }
-  const shiftBlocks = shiftRows
-    .map((shift) => ({ shift, transactions: transactionsByShift.get(shift.id) ?? [] }))
-    .filter((block) => block.shift.status === "open" || block.transactions.length > 0);
-
-  const footerCount = viewMode === "shift" ? shiftCount : count;
-  const footerPage = viewMode === "shift" ? shiftPage : page;
-  const footerPageSize = viewMode === "shift" ? SHIFT_PAGE_SIZE : PAGE_SIZE;
-  const setFooterPage = viewMode === "shift" ? setShiftPage : setPage;
 
   function handleExport() {
     const csv = toCSV(
@@ -330,7 +268,10 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         t.client_name ?? "",
         t.payment_method ?? "",
         Number(t.amount).toFixed(2).replace(".", ","),
-        t.description === UPGRADE_DESCRIPTION_MARKER ? "" : (t.description ?? ""),
+        t.description === UPGRADE_DESCRIPTION_MARKER ||
+        t.description === PRODUCTS_DESCRIPTION_MARKER
+          ? ""
+          : (t.description ?? ""),
         references?.names[t.user_id] ?? "",
         t.photo_url ? "Sim" : "Não",
       ]),
@@ -338,88 +279,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     downloadCSV(`lancamentos-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
-  function renderTransactionRow(t: TransactionRow) {
-    const displayedCategory = displayedIncomeCategory(t.category, t.description);
-    const income = t.transaction_type === "income";
-    const safeDrop = t.category === "Sangria";
-    const receiptRequired = t.payment_method === "Pix" || !income;
-    const isReversal = Boolean(t.reverses_transaction_id);
-    const wasReversed = Boolean(t.reversed_at);
-    return (
-      <li key={t.id} className="flex items-start gap-3 py-4">
-        <ReceiptThumb
-          path={t.photo_url}
-          alt={`Comprovante · ${displayedCategory} · ${formatBRL(t.amount)}`}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <p className="flex min-w-0 items-center gap-2 truncate font-medium">
-              {safeDrop ? (
-                <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
-                  Sangria · Cofre
-                </span>
-              ) : null}
-              {isReversal || wasReversed ? (
-                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {isReversal ? "Estorno" : "Estornado"}
-                </span>
-              ) : null}
-              <span className="truncate">
-                {displayedCategory}
-                {t.client_name ? ` · ${t.client_name}` : ""}
-              </span>
-            </p>
-            <span
-              className={`shrink-0 font-semibold ${income ? "text-primary" : safeDrop ? "text-warning" : "text-destructive"}`}
-            >
-              {income ? "+" : "-"}
-              {formatBRL(t.amount)}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {references?.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
-            {t.payment_method ?? (safeDrop ? "Transferência para o cofre" : "Despesa")} ·{" "}
-            {references?.names[t.user_id] ?? "Usuário"} ·{" "}
-            {new Date(t.created_at).toLocaleString("pt-BR")}
-          </p>
-          {t.description && t.description !== UPGRADE_DESCRIPTION_MARKER ? (
-            <p className="mt-1 text-sm text-muted-foreground">{t.description}</p>
-          ) : null}
-          {!t.photo_url && receiptRequired ? (
-            <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
-          ) : null}
-          {!isReversal && !wasReversed ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setPendingReversal(t)}>
-                <Undo2 className="size-4" /> Estornar erro
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() =>
-                  setDeleteTarget({
-                    kind: "transaction",
-                    id: t.id,
-                    label: `${displayedCategory}${t.client_name ? ` · ${t.client_name}` : ""}`,
-                    amount: t.amount,
-                    createdAt: t.created_at,
-                  })
-                }
-              >
-                Excluir definitivamente
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </li>
-    );
-  }
-
-  if (
-    isLoading ||
-    !references ||
-    (viewMode === "shift" && (isLoadingShifts || isLoadingShiftTransactions))
-  ) {
+  if (isLoading || !references) {
     return (
       <section className="surface-panel flex justify-center p-5">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -437,7 +297,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
         <Select value={unitId} onValueChange={setUnitId}>
           <SelectTrigger aria-label="Filtrar por unidade">
             <SelectValue placeholder="Unidade" />
@@ -566,115 +426,110 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         </div>
       ) : null}
 
-      {viewMode === "shift" ? (
-        shiftBlocks.length === 0 ? (
-          <p className="mt-6 text-sm text-muted-foreground">Nenhum turno encontrado.</p>
-        ) : (
-          <div className="mt-4 space-y-4">
-            {shiftBlocks.map(({ shift, transactions }) => {
-              const cashIncomeTotal = transactions
-                .filter((t) => t.transaction_type === "income" && t.payment_method === "Dinheiro")
-                .reduce((sum, t) => sum + Number(t.amount), 0);
-              const nonCashIncomeTotal = transactions
-                .filter((t) => t.transaction_type === "income" && t.payment_method !== "Dinheiro")
-                .reduce((sum, t) => sum + Number(t.amount), 0);
-              // O troco em dinheiro já está embutido na venda (lançada pelo valor
-              // real), então não é uma saída de caixa. O troco devolvido via Pix
-              // deixa a sobra em espécie na gaveta.
-              const expenseTotal = transactions
-                .filter((t) => t.transaction_type !== "income" && t.category !== "Troco")
-                .reduce((sum, t) => sum + Number(t.amount), 0);
-              const pixChangeTotal = transactions
-                .filter(
-                  (t) =>
-                    t.transaction_type !== "income" &&
-                    t.category === "Troco" &&
-                    t.payment_method === "Pix",
-                )
-                .reduce((sum, t) => sum + Number(t.amount), 0);
-              const openingTotal = Number(shift.actual_opening_total ?? 0);
-              const cashTotal = openingTotal + cashIncomeTotal + pixChangeTotal - expenseTotal;
-              const isOpen = shift.status === "open";
-              return (
-                <section
-                  key={shift.id}
-                  className={`rounded-lg border p-3 ${
-                    isOpen ? "border-primary/40 bg-primary/5" : "border-border/60"
-                  }`}
-                >
-                  <header className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="flex flex-wrap items-center gap-2 font-medium">
-                        {references.unitNames[shift.unit_id] ?? "Unidade"}
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-                            isOpen
-                              ? "bg-primary/15 text-primary"
-                              : shift.status === "disputed"
-                                ? "bg-destructive/15 text-destructive"
-                                : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {isOpen
-                            ? "Turno aberto"
-                            : shift.status === "disputed"
-                              ? "Com divergência"
-                              : "Fechado"}
-                        </span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Aberto em {new Date(shift.opened_at).toLocaleString("pt-BR")} por{" "}
-                        {references.names[shift.opened_by] ?? "Usuário"}
-                      </p>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Abertura {formatBRL(openingTotal)} + Dinheiro {formatBRL(cashIncomeTotal)}
-                      {pixChangeTotal > 0 ? ` + Troco via Pix ${formatBRL(pixChangeTotal)}` : ""}
-                      {nonCashIncomeTotal > 0
-                        ? ` · Outras entradas ${formatBRL(nonCashIncomeTotal)}`
-                        : ""}{" "}
-                      − Saídas {formatBRL(expenseTotal)} = {formatBRL(cashTotal)}
-                    </p>
-                  </header>
-                  {transactions.length === 0 ? (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Nenhum lançamento neste turno.
-                    </p>
-                  ) : (
-                    <ul className="mt-2 divide-y divide-border/60">
-                      {transactions.map(renderTransactionRow)}
-                    </ul>
-                  )}
-                </section>
-              );
-            })}
-          </div>
-        )
-      ) : rows.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="mt-6 text-sm text-muted-foreground">Nenhum lançamento encontrado.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-border/60">{rows.map(renderTransactionRow)}</ul>
+        <ul className="mt-4 divide-y divide-border/60">
+          {rows.map((t) => {
+            const displayedCategory = displayedIncomeCategory(t.category, t.description);
+            const income = t.transaction_type === "income";
+            const safeDrop = t.category === "Sangria";
+            const receiptRequired = t.payment_method === "Pix" || !income;
+            const isReversal = Boolean(t.reverses_transaction_id);
+            const wasReversed = Boolean(t.reversed_at);
+            return (
+              <li key={t.id} className="flex items-start gap-3 py-4">
+                <ReceiptThumb
+                  path={t.photo_url}
+                  alt={`Comprovante · ${displayedCategory} · ${formatBRL(t.amount)}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="flex min-w-0 items-center gap-2 truncate font-medium">
+                      {safeDrop ? (
+                        <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
+                          Sangria · Cofre
+                        </span>
+                      ) : null}
+                      {isReversal || wasReversed ? (
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {isReversal ? "Estorno" : "Estornado"}
+                        </span>
+                      ) : null}
+                      <span className="truncate">
+                        {displayedCategory}
+                        {t.client_name ? ` · ${t.client_name}` : ""}
+                      </span>
+                    </p>
+                    <span
+                      className={`shrink-0 font-semibold ${income ? "text-primary" : safeDrop ? "text-warning" : "text-destructive"}`}
+                    >
+                      {income ? "+" : "-"}
+                      {formatBRL(t.amount)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {references.unitNames[t.unit_id] ?? "Unidade"} ·{" "}
+                    {t.payment_method ?? (safeDrop ? "Transferência para o cofre" : "Despesa")} ·{" "}
+                    {references.names[t.user_id] ?? "Usuário"} ·{" "}
+                    {new Date(t.created_at).toLocaleString("pt-BR")}
+                  </p>
+                  {t.description &&
+                  t.description !== UPGRADE_DESCRIPTION_MARKER &&
+                  t.description !== PRODUCTS_DESCRIPTION_MARKER ? (
+                    <p className="mt-1 text-sm text-muted-foreground">{t.description}</p>
+                  ) : null}
+                  {!t.photo_url && receiptRequired ? (
+                    <p className="mt-1 text-xs font-semibold text-destructive">Sem comprovante</p>
+                  ) : null}
+                  {!isReversal && !wasReversed ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => setPendingReversal(t)}>
+                        <Undo2 className="size-4" /> Estornar erro
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() =>
+                          setDeleteTarget({
+                            kind: "transaction",
+                            id: t.id,
+                            label: `${displayedCategory}${t.client_name ? ` · ${t.client_name}` : ""}`,
+                            amount: t.amount,
+                            createdAt: t.created_at,
+                          })
+                        }
+                      >
+                        Excluir definitivamente
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
         <p className="text-xs text-muted-foreground">
-          {footerCount === 0
+          {count === 0
             ? "0 resultados"
-            : `${footerPage * footerPageSize + 1}–${Math.min((footerPage + 1) * footerPageSize, footerCount)} de ${footerCount}`}
+            : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, count)} de ${count}`}
         </p>
         <div className="flex gap-2">
           <Button
             size="sm"
             variant="secondary"
-            disabled={footerPage === 0}
-            onClick={() => setFooterPage((p) => p - 1)}
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
           >
             <ChevronLeft className="size-4" /> Anterior
           </Button>
           <Button
             size="sm"
             variant="secondary"
-            disabled={(footerPage + 1) * footerPageSize >= footerCount}
-            onClick={() => setFooterPage((p) => p + 1)}
+            disabled={(page + 1) * PAGE_SIZE >= count}
+            onClick={() => setPage((p) => p + 1)}
           >
             Próxima <ChevronRight className="size-4" />
           </Button>
