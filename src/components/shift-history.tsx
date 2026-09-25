@@ -349,16 +349,10 @@ export function ShiftHistory() {
                     <td
                       className={`py-3 pr-3 font-semibold ${shiftBad ? "text-destructive" : "text-muted-foreground"}`}
                     >
-                      {shiftDiff === null ? (
-                        "—"
-                      ) : (
-                        <>
-                          {shiftDiff > 0 ? "+" : ""}
-                          {formatBRL(shiftDiff)}
-                          {shiftBad ? (
-                            <span className="block text-xs">
-                              {shiftDiff > 0 ? "Sobra" : "Falta"}
-                            </span>
+                      <td className="py-3 pr-3">
+                        <span className="flex items-center gap-1">
+                          {bad ? (
+                            <AlertTriangle className="size-4 text-destructive" aria-hidden />
                           ) : null}
                         </>
                       )}
@@ -426,6 +420,32 @@ export function ShiftHistory() {
           </div>
         </div>
       ) : null}
+
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+        <p className="text-xs text-muted-foreground">
+          {count === 0
+            ? "0 turnos"
+            : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, count)} de ${count}`}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={page === 0}
+            onClick={() => setPage((current) => current - 1)}
+          >
+            <ChevronLeft className="size-4" /> Anterior
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={(page + 1) * PAGE_SIZE >= count}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            Próxima <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
 
       <Dialog open={Boolean(detail)} onOpenChange={(o) => !o && setDetail(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
