@@ -34,16 +34,14 @@ import {
   comandaPaymentSchema,
   computeChange,
   expenseSchema,
-  isMissingCategoryEnum,
-  isMissingUpgradeEnum,
+  incomeSchema,
+  isMissingIncomeCategoryEnum,
   isRoundAmount,
   parseAmount,
   safeDropSchema,
   uploadReceipt,
   UPGRADE_DESCRIPTION_MARKER,
-  type ChangeMethod,
-  type ComandaItem,
-  type ComandaPayment,
+  PRODUCTS_DESCRIPTION_MARKER,
   type IncomeCategory,
   type PaymentMethod,
 } from "@/lib/transactions";
@@ -102,23 +100,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   );
   const hasCash = payments.some((p) => p.method === "Dinheiro");
   const hasPix = payments.some((p) => p.method === "Pix");
-  const cashAmount = parsedPayments
-    .filter((p) => p.method === "Dinheiro" && Number.isFinite(p.value))
-    .reduce((sum, p) => sum + p.value, 0);
-  const receivedValue = parseAmount(cashReceived);
-  const changeValue = computeChange(receivedValue, cashAmount);
-  const changeInvalid =
-    isIncome &&
-    hasCash &&
-    cashReceived.trim() !== "" &&
-    (!Number.isFinite(receivedValue) || receivedValue < cashAmount);
-  const changeIsPix = isIncome && changeValue > 0 && changeMethod === "Pix";
-  // O troco em Pix reaproveita o comprovante principal — sem segunda caixa de foto.
-  const photoRequired = isIncome ? hasPix || changeIsPix : true;
-
-  // O pagamento precisa fechar com o total da comanda (soma dos itens).
-  const paymentsMatch = Math.abs(paidTotal - itemsTotal) < 0.005;
-  const paymentDiff = Math.round((paidTotal - itemsTotal) * 100) / 100;
+  const photoRequired = isIncome ? hasPix : true;
 
   const expenseValue = parseAmount(amount);
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
@@ -179,12 +161,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           return parsed.data;
         });
 
-        const itemsSum = validItems.reduce((s, i) => s + i.amount, 0);
-        const paySum = validPayments.reduce((s, p) => s + p.amount, 0);
-        if (Math.abs(itemsSum - paySum) >= 0.005) {
-          throw new Error(
-            `O pagamento (${formatBRL(paySum)}) não confere com o total da comanda (${formatBRL(itemsSum)}).`,
-          );
+        if (photoRequired && !file) {
+          throw new Error("O comprovante é obrigatório para pagamentos via Pix.");
         }
 
         if (photoRequired && !file) {
@@ -192,72 +170,42 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         }
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
-        const allocated = allocateComandaRows(validItems, validPayments);
-        const transactionRows = allocated.map((r) => ({
+        const transactionRows = parsedRows.map((r) => ({
           shift_id: shiftId,
           unit_id: unitId,
           user_id: userId,
           transaction_type: "income",
           category: r.category,
-          description: r.category === "Upgrade" ? UPGRADE_DESCRIPTION_MARKER : null,
-          client_name: nameParsed.data,
+          description:
+            r.category === "Upgrade"
+              ? UPGRADE_DESCRIPTION_MARKER
+              : r.category === "Produtos"
+                ? PRODUCTS_DESCRIPTION_MARKER
+                : null,
+          client_name: r.clientName,
           payment_method: r.paymentMethod,
           amount: r.amount,
           photo_url: photoPath,
         }));
-
         const { error: insertError } = await supabase.from("transactions").insert(transactionRows);
-        if (insertError) {
-          const usesUpgrade = allocated.some((r) => r.category === "Upgrade");
-          if (usesUpgrade && isMissingUpgradeEnum(insertError)) {
-            // O banco ainda não tem o enum Upgrade: grava como Renovação com o
-            // marcador, sem falsear as demais categorias.
-            const fallbackRows = transactionRows.map((row) =>
-              row.category === "Upgrade"
-                ? {
-                    ...row,
-                    category: "Renovação" as const,
-                    description: UPGRADE_DESCRIPTION_MARKER,
-                  }
-                : row,
-            );
-            const { error: fallbackError } = await supabase
-              .from("transactions")
-              .insert(fallbackRows);
-            if (fallbackError) throw fallbackError;
-          } else {
-            const missing = (["Serviços", "Produtos"] as const).find(
-              (c) =>
-                allocated.some((r) => r.category === c) && isMissingCategoryEnum(insertError, c),
-            );
-            if (missing) {
-              throw new Error(
-                `A categoria ${missing} ainda não foi publicada no banco. Aplique as migrations pendentes e tente de novo.`,
-              );
-            }
-            throw insertError;
-          }
+        if (
+          insertError &&
+          (category === "Upgrade" || category === "Produtos") &&
+          isMissingIncomeCategoryEnum(insertError, category)
+        ) {
+          const { error: fallbackError } = await supabase.from("transactions").insert(
+            transactionRows.map((row) => ({
+              ...row,
+              category: category === "Upgrade" ? ("Renovação" as const) : ("Bebida" as const),
+              description:
+                category === "Upgrade" ? UPGRADE_DESCRIPTION_MARKER : PRODUCTS_DESCRIPTION_MARKER,
+            })),
+          );
+          if (fallbackError) throw fallbackError;
+        } else if (insertError) {
+          throw insertError;
         }
-
-        if (changeValue > 0) {
-          const { error: changeError } = await supabase.from("transactions").insert({
-            shift_id: shiftId,
-            unit_id: unitId,
-            user_id: userId,
-            transaction_type: "expense",
-            category: "Troco",
-            payment_method: changeMethod,
-            client_name: nameParsed.data,
-            amount: changeValue,
-            description: `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`,
-            // Troco em Pix reaproveita o comprovante principal já enviado acima.
-            photo_url: changeMethod === "Pix" ? photoPath : null,
-            // O troco por Pix é uma saída da conta, não uma entrada a conferir.
-            pix_status: "paid",
-          });
-          if (changeError) throw changeError;
-        }
-        return itemsSum;
+        return parsedRows.reduce((s, r) => s + r.amount, 0);
       }
 
       if (isSafeDrop) {

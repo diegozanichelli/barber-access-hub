@@ -3,11 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const INCOME_CATEGORIES = [
   "Bebida",
+  "Produtos",
   "Assinatura Nova",
   "Renovação",
   "Upgrade",
-  "Serviços",
-  "Produtos",
 ] as const;
 export const PAYMENT_METHODS = ["Pix", "Crédito", "Débito", "Dinheiro", "Cellcoins"] as const;
 
@@ -16,26 +15,17 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 /** Compatibility marker for databases whose enum has not received Upgrade yet. */
 export const UPGRADE_DESCRIPTION_MARKER = "__upgrade__";
+export const PRODUCTS_DESCRIPTION_MARKER = "__products__";
 
 export function displayedIncomeCategory(category: string, description: string | null): string {
-  return description === UPGRADE_DESCRIPTION_MARKER ? "Upgrade" : category;
+  if (description === UPGRADE_DESCRIPTION_MARKER) return "Upgrade";
+  if (description === PRODUCTS_DESCRIPTION_MARKER) return "Produtos";
+  return category;
 }
 
-export function isMissingUpgradeEnum(error: { message?: string } | null): boolean {
-  return isMissingCategoryEnum(error, "Upgrade");
-}
-
-/**
- * O banco recusa a categoria quando o enum ainda não a recebeu — situação real
- * aqui, porque o deploy publica a interface sem aplicar as migrations.
- *
- * Serviços e Produtos não ganham o disfarce que Upgrade tem: gravar a venda
- * com outra categoria para "funcionar" falsearia o relatório de vendas em
- * silêncio, o que é pior que recusar. Recusar e dizer o que falta é mais honesto.
- */
-export function isMissingCategoryEnum(
+export function isMissingIncomeCategoryEnum(
   error: { message?: string } | null,
-  category: string,
+  category: "Upgrade" | "Produtos",
 ): boolean {
   return Boolean(
     error?.message?.includes("invalid input value for enum transaction_category") &&
