@@ -14,6 +14,9 @@ export type ShiftRow = {
   status: string;
   opened_at: string;
   closed_at: string | null;
+  /** Preenchidos ao encerrar uma divergência; a diferença registrada não muda. */
+  resolved_at: string | null;
+  resolution_note: string | null;
 };
 export type TransactionRow = {
   id: string;

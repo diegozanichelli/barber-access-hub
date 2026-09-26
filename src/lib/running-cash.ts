@@ -35,6 +35,10 @@ export function computeRunningCash(
     const amount = Number(t.amount ?? 0);
     if (t.transaction_type === "income") {
       if (t.payment_method === "Dinheiro") total += amount;
+    } else if (t.category === "Troco") {
+      // Troco em dinheiro já está embutido na venda (a venda foi lançada pelo
+      // valor real). Troco devolvido via Pix deixa a sobra em espécie na gaveta.
+      if (t.payment_method === "Pix") total += amount;
     } else {
       total -= amount;
     }
@@ -53,6 +57,10 @@ export const computeExpectedClosing = computeRunningCash;
  *
  * O cofre é acumulado por UNIDADE (não zera a cada turno): passe todos os
  * lançamentos e retiradas da unidade, não apenas os do turno aberto.
+ *
+ * ATENÇÃO: as telas usam a RPC `unit_safe_balance`, que é a fonte autoritativa.
+ * Esta função existe para cobrir a mesma regra em teste; ao mudar uma das duas,
+ * mude a outra, senão o teste continua verde sobre uma regra que não roda.
  */
 export function computeSafeBalance(
   transactions: CashTransaction[] = [],
