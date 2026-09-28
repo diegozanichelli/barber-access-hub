@@ -27,7 +27,7 @@ export function useSessionProfile() {
           .select("full_name, unit_id, status, units ( name )")
           .eq("id", user.id)
           .maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", user.id),
+        supabase.from("user_roles").select("role").eq("user_id", user.id).maybeSingle(),
       ]);
 
       const unit = (profile as { units?: { name: string } | null } | null)?.units ?? null;
@@ -36,7 +36,7 @@ export function useSessionProfile() {
         userId: user.id,
         email: user.email ?? null,
         fullName: profile?.full_name?.trim() || user.email?.split("@")[0] || "Usuário",
-        role: (roles?.[0]?.role as AppRole | undefined) ?? null,
+        role: (roles?.role as AppRole | undefined) ?? null,
         unitName: unit?.name ?? null,
         unitId: profile?.unit_id ?? null,
         status: (profile?.status as SessionProfile["status"] | undefined) ?? "approved",
