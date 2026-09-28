@@ -59,10 +59,7 @@ function AuthPage() {
 
   const { data: units } = useQuery({
     queryKey: ["units-public"],
-    queryFn: async () => {
-      const { data } = await supabase.from("units").select("id, name").order("name");
-      return data ?? [];
-    },
+    queryFn: () => listSignupUnits(),
   });
 
   useEffect(() => {

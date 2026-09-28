@@ -25,8 +25,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/cash";
 import { friendlyError } from "@/lib/errors";
 import {
+  CHANGE_METHODS,
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
+  allocateComandaRows,
+  clientNameSchema,
+  comandaItemSchema,
+  comandaPaymentSchema,
+  computeChange,
   expenseSchema,
   incomeSchema,
   isMissingIncomeCategoryEnum,
@@ -51,27 +57,44 @@ type Props = {
 };
 
 type PaymentRow = { id: string; method: PaymentMethod | ""; amount: string };
+type ItemRow = { id: string; category: IncomeCategory | ""; amount: string };
 
 function newRow(): PaymentRow {
   return { id: crypto.randomUUID(), method: "", amount: "" };
 }
 
+function newItem(): ItemRow {
+  return { id: crypto.randomUUID(), category: "", amount: "" };
+}
+
 export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId }: Props) {
   const queryClient = useQueryClient();
-  const [category, setCategory] = useState<IncomeCategory | "">("");
+  const [items, setItems] = useState<ItemRow[]>([newItem()]);
   const [clientName, setClientName] = useState("");
   const [payments, setPayments] = useState<PaymentRow[]>([newRow()]);
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
+
+  const [cashReceived, setCashReceived] = useState("");
+  const [changeMethod, setChangeMethod] = useState<ChangeMethod>("Dinheiro");
   const [error, setError] = useState<string | null>(null);
 
   const isIncome = type === "income";
   const isExpense = type === "expense";
   const isSafeDrop = type === "safe_drop";
 
+  const parsedItems = items.map((i) => ({ ...i, value: parseAmount(i.amount) }));
+  const itemsTotal = parsedItems.reduce(
+    (sum, i) => sum + (Number.isFinite(i.value) ? i.value : 0),
+    0,
+  );
+  const hasValidItems = parsedItems.some(
+    (i) => i.category !== "" && Number.isFinite(i.value) && i.value > 0,
+  );
+
   const parsedPayments = payments.map((p) => ({ ...p, value: parseAmount(p.amount) }));
-  const splitTotal = parsedPayments.reduce(
+  const paidTotal = parsedPayments.reduce(
     (sum, p) => sum + (Number.isFinite(p.value) ? p.value : 0),
     0,
   );
@@ -83,42 +106,67 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   const showRoundWarning = isExpense && isRoundAmount(expenseValue);
 
   function reset() {
-    setCategory("");
+    setItems([newItem()]);
     setClientName("");
     setPayments([newRow()]);
     setAmount("");
     setDescription("");
     setFile(null);
+    setCashReceived("");
+    setChangeMethod("Dinheiro");
     setError(null);
   }
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (isIncome) {
-        const rows = parsedPayments.filter((p) => p.method !== "" || p.amount.trim() !== "");
-        if (rows.length === 0) throw new Error("Informe ao menos uma forma de pagamento.");
+        const nameParsed = clientNameSchema.safeParse(clientName);
+        if (!nameParsed.success) {
+          throw new Error(nameParsed.error.issues[0]?.message ?? "Informe o nome do cliente.");
+        }
 
-        const methods = rows.map((p) => p.method);
+        const filledItems = parsedItems.filter((i) => i.category !== "" || i.amount.trim() !== "");
+        if (filledItems.length === 0) {
+          throw new Error("Adicione ao menos um item à comanda.");
+        }
+        const validItems: ComandaItem[] = filledItems.map((i) => {
+          if (i.category === "") throw new Error("Selecione a categoria de cada item.");
+          const parsed = comandaItemSchema.safeParse({ category: i.category, amount: i.value });
+          if (!parsed.success) {
+            throw new Error(
+              parsed.error.issues[0]?.message ?? "Informe um valor válido para o item.",
+            );
+          }
+          return parsed.data;
+        });
+
+        const paymentRows = parsedPayments.filter((p) => p.method !== "" || p.amount.trim() !== "");
+        if (paymentRows.length === 0) {
+          throw new Error("Informe ao menos uma forma de pagamento.");
+        }
+        const methods = paymentRows.map((p) => p.method);
         if (new Set(methods).size !== methods.length) {
           throw new Error(
             "Você repetiu a mesma forma de pagamento. Some os valores em uma única linha.",
           );
         }
-
-        const parsedRows = rows.map((p) => {
-          const parsed = incomeSchema.safeParse({
-            category,
-            clientName,
-            amount: p.value,
-            paymentMethod: p.method,
-          });
-          if (!parsed.success)
-            throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
+        const validPayments: ComandaPayment[] = paymentRows.map((p) => {
+          if (p.method === "") throw new Error("Selecione a forma de cada pagamento.");
+          const parsed = comandaPaymentSchema.safeParse({ method: p.method, amount: p.value });
+          if (!parsed.success) {
+            throw new Error(
+              parsed.error.issues[0]?.message ?? "Informe um valor válido para o pagamento.",
+            );
+          }
           return parsed.data;
         });
 
         if (photoRequired && !file) {
           throw new Error("O comprovante é obrigatório para pagamentos via Pix.");
+        }
+
+        if (photoRequired && !file) {
+          throw new Error("O comprovante é obrigatório para pagamentos e trocos via Pix.");
         }
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
@@ -202,7 +250,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     },
     onSuccess: (value) => {
       toast.success(
-        isIncome ? "Entrada registrada" : isSafeDrop ? "Sangria registrada" : "Despesa registrada",
+        isIncome ? "Comanda registrada" : isSafeDrop ? "Sangria registrada" : "Despesa registrada",
         { description: formatBRL(value) },
       );
       void queryClient.invalidateQueries({ queryKey: ["shift-transactions", shiftId] });
@@ -213,7 +261,23 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     onError: (err: Error) => setError(friendlyError(err)),
   });
 
-  const blocked = photoRequired && !file;
+  const incomeBlocked =
+    isIncome && ((photoRequired && !file) || changeInvalid || !hasValidItems || !paymentsMatch);
+  const blocked = isIncome ? incomeBlocked : photoRequired && !file;
+
+  const saveLabel = !isIncome
+    ? blocked
+      ? "Foto obrigatória"
+      : "Salvar"
+    : !hasValidItems
+      ? "Adicione um item"
+      : !paymentsMatch
+        ? "Pagamento não confere"
+        : changeInvalid
+          ? "Confira o troco"
+          : photoRequired && !file
+            ? "Foto obrigatória"
+            : "Salvar comanda";
 
   const title = isIncome
     ? "Registrar Entrada"
@@ -222,7 +286,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
       : "Registrar Despesa";
 
   const descriptionText = isIncome
-    ? "Registre uma venda ou assinatura do caixa aberto. Aceita pagamento misto."
+    ? "Registre a comanda do cliente no caixa aberto. Vários itens e pagamento misto são aceitos."
     : isSafeDrop
       ? "Retirada de dinheiro da gaveta para o cofre. Não é despesa da loja."
       : "Registre uma compra para a loja. A nota fiscal é obrigatória.";
@@ -252,22 +316,6 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           {isIncome ? (
             <>
               <div className="space-y-2">
-                <Label htmlFor="tx-category">Categoria</Label>
-                <Select value={category} onValueChange={(v) => setCategory(v as IncomeCategory)}>
-                  <SelectTrigger id="tx-category" className="h-12">
-                    <SelectValue placeholder="Selecione a categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INCOME_CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="tx-client">Nome e Sobrenome do Cliente</Label>
                 <Input
                   id="tx-client"
@@ -277,6 +325,92 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                   onChange={(e) => setClientName(e.target.value)}
                   placeholder="João Souza"
                 />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-baseline justify-between">
+                  <Label>Itens da comanda</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {items.length === 1 ? "1 item" : `${items.length} itens`}
+                  </span>
+                </div>
+                {items.map((row, index) => (
+                  <div key={row.id} className="rounded-lg border border-border/60 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Item {index + 1}
+                      </span>
+                      {items.length > 1 ? (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Remover item ${index + 1}`}
+                          onClick={() => setItems((prev) => prev.filter((i) => i.id !== row.id))}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 grid gap-2">
+                      <Select
+                        value={row.category}
+                        onValueChange={(v) =>
+                          setItems((prev) =>
+                            prev.map((i) =>
+                              i.id === row.id ? { ...i, category: v as IncomeCategory } : i,
+                            ),
+                          )
+                        }
+                      >
+                        <SelectTrigger
+                          className="h-12"
+                          aria-label={`Categoria do item ${index + 1}`}
+                        >
+                          <SelectValue placeholder="Selecione a categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INCOME_CATEGORIES.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        className="h-12 text-lg"
+                        inputMode="decimal"
+                        aria-label={`Valor do item ${index + 1}`}
+                        value={row.amount}
+                        onChange={(e) =>
+                          setItems((prev) =>
+                            prev.map((i) =>
+                              i.id === row.id ? { ...i, amount: e.target.value } : i,
+                            ),
+                          )
+                        }
+                        placeholder="0,00"
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full"
+                  onClick={() => setItems((prev) => [...prev, newItem()])}
+                >
+                  <Plus className="size-4" />
+                  Adicionar item
+                </Button>
+
+                <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Total da comanda</span>
+                  <span className="text-lg font-semibold text-primary">
+                    {formatBRL(itemsTotal)}
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -353,17 +487,78 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                 </Button>
 
                 <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
-                  <span className="text-sm text-muted-foreground">Total do atendimento</span>
-                  <span className="text-lg font-semibold text-primary">
-                    {formatBRL(splitTotal)}
-                  </span>
+                  <span className="text-sm text-muted-foreground">Pago</span>
+                  {itemsTotal > 0 && paymentsMatch ? (
+                    <span className="text-sm font-semibold text-primary">
+                      ✓ confere · {formatBRL(paidTotal)}
+                    </span>
+                  ) : itemsTotal > 0 && paymentDiff < 0 ? (
+                    <span className="text-sm font-semibold text-destructive">
+                      faltam {formatBRL(-paymentDiff)}
+                    </span>
+                  ) : itemsTotal > 0 && paymentDiff > 0 ? (
+                    <span className="text-sm font-semibold text-destructive">
+                      sobram {formatBRL(paymentDiff)}
+                    </span>
+                  ) : (
+                    <span className="text-sm font-semibold">{formatBRL(paidTotal)}</span>
+                  )}
                 </div>
 
                 {hasCash ? (
-                  <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
-                    🚨 ATENÇÃO: Digite aqui EXATAMENTE o valor em dinheiro que VAI FICAR NA GAVETA
-                    física. Não misture dinheiro pessoal para troco.
-                  </p>
+                  <>
+                    <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
+                      🚨 ATENÇÃO: No valor do pagamento em dinheiro digite EXATAMENTE o que entra no
+                      caixa. Se o cliente pagou com nota maior, informe abaixo quanto ele entregou.
+                    </p>
+
+                    <div className="space-y-2 rounded-lg border border-border/60 p-3">
+                      <Label htmlFor="tx-received">
+                        Quanto o cliente entregou em dinheiro? (opcional)
+                      </Label>
+                      <Input
+                        id="tx-received"
+                        className="h-12 text-lg"
+                        inputMode="decimal"
+                        value={cashReceived}
+                        onChange={(e) => setCashReceived(e.target.value)}
+                        placeholder="0,00"
+                      />
+                      {changeInvalid ? (
+                        <p className="text-xs font-semibold text-destructive">
+                          O valor entregue não pode ser menor que {formatBRL(cashAmount)}.
+                        </p>
+                      ) : changeValue > 0 ? (
+                        <>
+                          <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
+                            <span className="text-sm text-muted-foreground">Troco a devolver</span>
+                            <span className="text-lg font-semibold">{formatBRL(changeValue)}</span>
+                          </div>
+                          <Label htmlFor="tx-change-method">Como o troco foi devolvido?</Label>
+                          <Select
+                            value={changeMethod}
+                            onValueChange={(v) => setChangeMethod(v as ChangeMethod)}
+                          >
+                            <SelectTrigger id="tx-change-method" className="h-12">
+                              <SelectValue placeholder="Forma do troco" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CHANGE_METHODS.map((m) => (
+                                <SelectItem key={m} value={m}>
+                                  {m}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {changeMethod === "Pix"
+                              ? "Anexe abaixo o comprovante do Pix do troco (obrigatório) — é a mesma foto do comprovante da venda."
+                              : "O troco em dinheiro sai da gaveta: fica registrado, mas o saldo esperado continua o valor da venda."}
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
+                  </>
                 ) : null}
               </div>
             </>
@@ -438,7 +633,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
 
           <Button type="submit" className="h-12 w-full" disabled={blocked || mutation.isPending}>
             {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-            {blocked ? "Foto obrigatória" : "Salvar"}
+            {saveLabel}
           </Button>
         </form>
       </DialogContent>

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { PixApprovals } from "@/components/pix-approvals";
 import { ShiftPanel } from "@/components/shift-panel";
 import { useSessionProfile } from "@/hooks/use-session-profile";
 import { requireDashboardRole } from "@/lib/route-guards";
@@ -34,7 +35,12 @@ function SupervisorDashboard() {
       title={isLoading ? "Carregando..." : `Bem-vindo Supervisor ${profile?.fullName ?? ""}`}
       subtitle={profile?.unitName ? `Unidade ${profile.unitName}` : "Unidade não atribuída"}
     >
-      {profile ? <ShiftPanel userId={profile.userId} unitId={profile.unitId} /> : null}
+      {profile ? (
+        <div className="space-y-4">
+          <ShiftPanel userId={profile.userId} unitId={profile.unitId} />
+          <PixApprovals {...(profile.unitId ? { unitId: profile.unitId } : {})} />
+        </div>
+      ) : null}
     </DashboardShell>
   );
 }
