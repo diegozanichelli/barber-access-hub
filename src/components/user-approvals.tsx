@@ -13,20 +13,25 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { approveUser, listPendingUsers, rejectUser } from "@/lib/admin-users.functions";
-import { ROLE_LABELS, ROLE_ORDER, type AppRole } from "@/lib/roles";
+import { ROLE_LABELS, roleRequiresUnit, type AppRole } from "@/lib/roles";
 
 const NO_UNIT = "__none__";
+type ApprovableRole = Exclude<AppRole, "auditor">;
+const APPROVABLE_ROLES: ApprovableRole[] = ["atendente", "supervisor", "socio"];
 
 export function UserApprovals() {
   const queryClient = useQueryClient();
   const fetchPending = useServerFn(listPendingUsers);
   const approve = useServerFn(approveUser);
   const reject = useServerFn(rejectUser);
-  const [drafts, setDrafts] = useState<Record<string, { role: AppRole; unitId: string }>>({});
+  const [drafts, setDrafts] = useState<Record<string, { role: ApprovableRole; unitId: string }>>(
+    {},
+  );
 
   const { data: pending, isLoading } = useQuery({
     queryKey: ["pending-users"],
     queryFn: () => fetchPending(),
+    refetchInterval: 15_000,
   });
 
   const { data: units } = useQuery({
@@ -43,7 +48,7 @@ export function UserApprovals() {
   }
 
   const approveMutation = useMutation({
-    mutationFn: (vars: { userId: string; role: AppRole; unitId: string | null }) =>
+    mutationFn: (vars: { userId: string; role: ApprovableRole; unitId: string | null }) =>
       approve({ data: vars }),
     onSuccess: () => {
       toast.success("Cadastro aprovado");
@@ -86,7 +91,9 @@ export function UserApprovals() {
         <ul className="mt-4 space-y-4">
           {(pending ?? []).map((user) => {
             const draft = drafts[user.id] ?? {
-              role: (user.requestedRole as AppRole | null) ?? "atendente",
+              role: APPROVABLE_ROLES.includes(user.requestedRole as ApprovableRole)
+                ? (user.requestedRole as ApprovableRole)
+                : "atendente",
               unitId: user.unitId ?? NO_UNIT,
             };
             return (
@@ -107,8 +114,8 @@ export function UserApprovals() {
                       setDrafts((p) => ({
                         ...p,
                         [user.id]: {
-                          role: role as AppRole,
-                          unitId: role === "auditor" ? NO_UNIT : draft.unitId,
+                          role: role as ApprovableRole,
+                          unitId: roleRequiresUnit(role as AppRole) ? draft.unitId : NO_UNIT,
                         },
                       }))
                     }
@@ -117,7 +124,7 @@ export function UserApprovals() {
                       <SelectValue placeholder="Papel" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ROLE_ORDER.map((r) => (
+                      {APPROVABLE_ROLES.map((r) => (
                         <SelectItem key={r} value={r}>
                           {ROLE_LABELS[r]}
                         </SelectItem>
@@ -125,11 +132,7 @@ export function UserApprovals() {
                     </SelectContent>
                   </Select>
 
-                  {draft.role === "auditor" ? (
-                    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                      Acesso a todas as unidades
-                    </div>
-                  ) : (
+                  {roleRequiresUnit(draft.role) ? (
                     <Select
                       value={draft.unitId}
                       onValueChange={(unitId) =>
@@ -140,7 +143,7 @@ export function UserApprovals() {
                         <SelectValue placeholder="Unidade" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NO_UNIT}>Sem unidade</SelectItem>
+                        <SelectItem value={NO_UNIT}>Selecione uma unidade</SelectItem>
                         {(units ?? []).map((u) => (
                           <SelectItem key={u.id} value={u.id}>
                             {u.name}
@@ -148,17 +151,21 @@ export function UserApprovals() {
                         ))}
                       </SelectContent>
                     </Select>
+                  ) : (
+                    <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+                      Sócio · acesso a todas as unidades
+                    </div>
                   )}
 
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      disabled={busy}
+                      disabled={busy || (roleRequiresUnit(draft.role) && draft.unitId === NO_UNIT)}
                       onClick={() =>
                         approveMutation.mutate({
                           userId: user.id,
                           role: draft.role,
-                          unitId: draft.unitId === NO_UNIT ? null : draft.unitId,
+                          unitId: roleRequiresUnit(draft.role) ? draft.unitId : null,
                         })
                       }
                     >
@@ -168,7 +175,10 @@ export function UserApprovals() {
                       size="sm"
                       variant="destructive"
                       disabled={busy}
-                      onClick={() => rejectMutation.mutate(user.id)}
+                      onClick={() => {
+                        if (!window.confirm(`Recusar o cadastro de ${user.fullName}?`)) return;
+                        rejectMutation.mutate(user.id);
+                      }}
                     >
                       Recusar
                     </Button>

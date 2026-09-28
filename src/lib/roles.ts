@@ -15,3 +15,8 @@ export const ROLE_ROUTES: Record<AppRole, string> = {
 };
 
 export const ROLE_ORDER: AppRole[] = ["atendente", "supervisor", "socio", "auditor"];
+
+/** Operational roles belong to one shop; network roles never do. */
+export function roleRequiresUnit(role: AppRole): boolean {
+  return role === "atendente" || role === "supervisor";
+}
