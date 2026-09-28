@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AuditFeed } from "@/components/audit-feed";
 import { ChangeRequests } from "@/components/change-requests";
-import { PixApprovals } from "@/components/pix-approvals";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { PartnerBalances } from "@/components/partner-balances";
 import { ShiftHistory } from "@/components/shift-history";
@@ -59,7 +58,6 @@ function AuditorDashboard() {
           <TabsTrigger value="history">Turnos</TabsTrigger>
           <TabsTrigger value="units">Unidades</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
-          <TabsTrigger value="partners">Sócios</TabsTrigger>
           <TabsTrigger value="requests">Solicitações</TabsTrigger>
           <TabsTrigger value="sales">Vendas</TabsTrigger>
         </TabsList>
@@ -79,10 +77,6 @@ function AuditorDashboard() {
           <AuditFeed {...(selectedUnitId ? { selectedUnitId } : {})} />
         </TabsContent>
 
-        <TabsContent value="pix">
-          <PixApprovals />
-        </TabsContent>
-
         <TabsContent value="history">
           <ShiftHistory />
         </TabsContent>
@@ -90,9 +84,6 @@ function AuditorDashboard() {
         <TabsContent value="users" className="space-y-4">
           <UserApprovals />
           <UserManager />
-        </TabsContent>
-        <TabsContent value="partners">
-          <PartnerBalances />
         </TabsContent>
         <TabsContent value="requests">
           <ChangeRequests />

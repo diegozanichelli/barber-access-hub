@@ -30,6 +30,12 @@ const correctOpeningSchema = z.object({
   reason: z.string().trim().min(5).max(500),
 });
 
+type RpcError = { code?: string; message: string } | null;
+
+function isMissingRpc(error: RpcError) {
+  return error?.code === "PGRST202" || Boolean(error?.message.includes("schema cache"));
+}
+
 async function assertMaster(context: {
   userId: string;
   supabase: {
@@ -47,12 +53,26 @@ async function assertMaster(context: {
   if (!isMaster) throw new Error("Somente o login master pode alterar uma abertura.");
 }
 
-/** Compatibility path for correcting an opening before the RPC is published. */
+/**
+ * Corrects an opening through the atomic database RPC. The administrative
+ * compatibility path is used only while that RPC is not published yet.
+ */
 export const correctOpeningOnServer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => correctOpeningSchema.parse(data))
   .handler(async ({ context, data }) => {
     await assertMaster(context);
+
+    const correction = await context.supabase.rpc("correct_opening_cash_count", {
+      _shift_id: data.shiftId,
+      _quantities: data.quantities,
+      _reason: data.reason,
+    });
+    if (!correction.error) {
+      return { total: Number(correction.data), mode: "rpc" as const };
+    }
+    if (!isMissingRpc(correction.error)) throw correction.error;
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: shift, error: shiftError } = await supabaseAdmin
       .from("shifts")
