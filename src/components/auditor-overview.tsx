@@ -1,22 +1,8 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { friendlyError } from "@/lib/errors";
 import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatBRL } from "@/lib/cash";
 import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { differenceReason, explainShiftDivergence } from "@/lib/divergences";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
 /** O que está sendo encerrado: um turno em divergência ou uma retirada contestada. */
@@ -271,21 +257,6 @@ export function AuditorOverview({
                       <strong>Observação do recebimento:</strong> {handover.notes}
                     </p>
                   ) : null}
-                  <Button
-                    className="mt-3"
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      setNote("");
-                      setDispute({
-                        kind: "shift",
-                        id: shift.id,
-                        label: `Turno de ${data.names[shift.opened_by] ?? "Usuário"} · ${data.unitNames[shift.unit_id] ?? "Unidade"}`,
-                      });
-                    }}
-                  >
-                    Encerrar divergência
-                  </Button>
                 </article>
               );
             })}
@@ -294,27 +265,11 @@ export function AuditorOverview({
               .map((w) => (
                 <div
                   key={w.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/40 bg-background/50 p-3 text-sm"
+                  className="rounded-lg border border-destructive/40 bg-background/50 p-3 text-sm"
                 >
-                  <span>
-                    Retirada contestada · {data.unitNames[w.unit_id] ?? "Unidade"} ·{" "}
-                    {formatBRL(w.amount)} · {data.names[w.partner_id] ?? "Sócio"} ·{" "}
-                    {new Date(w.created_at).toLocaleString("pt-BR")}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      setNote("");
-                      setDispute({
-                        kind: "withdrawal",
-                        id: w.id,
-                        label: `Retirada de ${formatBRL(w.amount)} · ${data.names[w.partner_id] ?? "Sócio"}`,
-                      });
-                    }}
-                  >
-                    Encerrar divergência
-                  </Button>
+                  Retirada contestada · {data.unitNames[w.unit_id] ?? "Unidade"} ·{" "}
+                  {formatBRL(w.amount)} · {data.names[w.partner_id] ?? "Sócio"} ·{" "}
+                  {new Date(w.created_at).toLocaleString("pt-BR")}
                 </div>
               ))}
           </div>
