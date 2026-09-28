@@ -1,11 +1,37 @@
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 
-export const INCOME_CATEGORIES = ["Bebida", "Assinatura Nova", "Renovação"] as const;
-export const PAYMENT_METHODS = ["Pix", "Crédito", "Débito", "Dinheiro"] as const;
+export const INCOME_CATEGORIES = [
+  "Bebida",
+  "Produtos",
+  "Assinatura Nova",
+  "Renovação",
+  "Upgrade",
+] as const;
+export const PAYMENT_METHODS = ["Pix", "Crédito", "Débito", "Dinheiro", "Cellcoins"] as const;
 
 export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** Compatibility marker for databases whose enum has not received Upgrade yet. */
+export const UPGRADE_DESCRIPTION_MARKER = "__upgrade__";
+export const PRODUCTS_DESCRIPTION_MARKER = "__products__";
+
+export function displayedIncomeCategory(category: string, description: string | null): string {
+  if (description === UPGRADE_DESCRIPTION_MARKER) return "Upgrade";
+  if (description === PRODUCTS_DESCRIPTION_MARKER) return "Produtos";
+  return category;
+}
+
+export function isMissingIncomeCategoryEnum(
+  error: { message?: string } | null,
+  category: "Upgrade" | "Produtos",
+): boolean {
+  return Boolean(
+    error?.message?.includes("invalid input value for enum transaction_category") &&
+    error.message.includes(category),
+  );
+}
 
 export const incomeSchema = z.object({
   category: z.enum(INCOME_CATEGORIES),
@@ -24,9 +50,9 @@ export const safeDropSchema = z.object({
   description: z.string().trim().max(200).optional(),
 });
 
-/** Photo is mandatory for subscriptions (new/renewal) and for every Pix payment. */
-export function incomePhotoRequired(category: string, paymentMethod: string): boolean {
-  return category === "Assinatura Nova" || category === "Renovação" || paymentMethod === "Pix";
+/** For incoming payments, proof is mandatory only for Pix. */
+export function incomePhotoRequired(_category: string, paymentMethod: string): boolean {
+  return paymentMethod === "Pix";
 }
 
 /** True when the amount has no cents (e.g. 38,00) — likely an incorrect rounding. */

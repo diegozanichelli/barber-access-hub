@@ -42,6 +42,10 @@ export function calculateTotal(quantities: CashQuantities): number {
   return Math.round(total * 100) / 100;
 }
 
+export function countMatchesExpected(quantities: CashQuantities, expected: number): boolean {
+  return Math.abs(calculateTotal(quantities) - Number(expected)) < 0.005;
+}
+
 export function formatBRL(value: number | string | null | undefined): string {
   const num = Number(value ?? 0);
   return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
