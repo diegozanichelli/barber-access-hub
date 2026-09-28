@@ -18,6 +18,8 @@ import { toast } from "sonner";
 import { BlindCalculator } from "@/components/blind-calculator";
 import { DivergenceRecountDialog } from "@/components/divergence-recount-dialog";
 import { CashLimitBanner } from "@/components/cash-limit-banner";
+import { ShiftReminderBanner } from "@/components/shift-reminder-banner";
+
 import { TransactionDialog, type TransactionDialogType } from "@/components/transaction-dialog";
 import { TransactionChangeRequestDialog } from "@/components/transaction-change-request-dialog";
 import { WithdrawalDialog } from "@/components/withdrawal-dialog";
@@ -356,6 +358,8 @@ export function ShiftPanel({ userId, unitId }: Props) {
     <>
       {openShift && isOverLimit(runningCash) ? <CashLimitBanner runningCash={runningCash} /> : null}
 
+      {openShift ? <ShiftReminderBanner openedAt={openShift.opened_at} userId={userId} /> : null}
+
       {lastResult ? (
         <section className="surface-panel p-5">
           <p className="text-sm text-muted-foreground">{lastResult.label}</p>
@@ -507,6 +511,16 @@ export function ShiftPanel({ userId, unitId }: Props) {
                     {w.note ? ` · ${w.note}` : ""}
                   </p>
                 </div>
+                {w.photo_url ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label="Ver comprovante de entrega"
+                    onClick={() => void openReceipt(w.photo_url!)}
+                  >
+                    <ImageIcon className="size-4" />
+                  </Button>
+                ) : null}
                 <span
                   className={
                     w.status === "disputed"
@@ -657,6 +671,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
             open={withdrawalOpen}
             onOpenChange={setWithdrawalOpen}
             shiftId={openShift.id}
+            unitId={unitId}
             safeBalance={safeBalance}
           />
         </>
