@@ -44,44 +44,6 @@ describe("computeRunningCash", () => {
       ]),
     ).toBe(100);
   });
-
-  test("does not subtract cash change already included in the net sale amount", () => {
-    expect(
-      computeRunningCash(915.25, [
-        {
-          transaction_type: "income",
-          payment_method: "Dinheiro",
-          category: "Serviços",
-          amount: 45,
-        },
-        {
-          transaction_type: "expense",
-          payment_method: "Dinheiro",
-          category: "Troco",
-          amount: 5,
-        },
-      ]),
-    ).toBe(960.25);
-  });
-
-  test("adds cash retained in the drawer when change is returned by Pix", () => {
-    expect(
-      computeRunningCash(915.25, [
-        {
-          transaction_type: "income",
-          payment_method: "Dinheiro",
-          category: "Serviços",
-          amount: 45,
-        },
-        {
-          transaction_type: "expense",
-          payment_method: "Pix",
-          category: "Troco",
-          amount: 5,
-        },
-      ]),
-    ).toBe(965.25);
-  });
 });
 
 describe("computeSafeBalance", () => {

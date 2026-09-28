@@ -13,7 +13,6 @@ import {
   emptyUnitSalesSummary,
   SALES_REPORT_CATEGORIES,
   summarizeSalesByUnit,
-  type SalesMetric,
   type SalesReportTransaction,
 } from "@/lib/sales-report";
 import { displayedIncomeCategory } from "@/lib/transactions";
@@ -91,10 +90,7 @@ export function SalesReport() {
     ...unit,
     sales: summaries[unit.id] ?? emptyUnitSalesSummary(unit.id),
   }));
-  // Inicializador derivado da lista de categorias, para uma categoria nova
-  // nunca ficar de fora do total da rede por causa de uma linha esquecida.
-  type NetworkTotals = Record<(typeof SALES_REPORT_CATEGORIES)[number] | "all", SalesMetric>;
-  const network = units.reduce<NetworkTotals>(
+  const network = units.reduce(
     (total, unit) => {
       for (const category of SALES_REPORT_CATEGORIES) {
         total[category].count += unit.sales.categories[category].count;
@@ -105,38 +101,61 @@ export function SalesReport() {
       return total;
     },
     {
-      ...(Object.fromEntries(
-        SALES_REPORT_CATEGORIES.map((category) => [category, { count: 0, amount: 0 }]),
-      ) as Record<(typeof SALES_REPORT_CATEGORIES)[number], SalesMetric>),
+      Bebida: { count: 0, amount: 0 },
+      Produtos: { count: 0, amount: 0 },
+      "Assinatura Nova": { count: 0, amount: 0 },
+      Renovação: { count: 0, amount: 0 },
+      Upgrade: { count: 0, amount: 0 },
       all: { count: 0, amount: 0 },
     },
   );
 
   function exportReport() {
-    // Colunas derivadas das categorias: incluir uma categoria nova no relatório
-    // passa a exportá-la no CSV sem precisar editar cabeçalho e linhas à mão.
-    const metricCells = (metric: SalesMetric) => [metric.count, metric.amount.toFixed(2)];
     const rows = units.map((unit) => [
       unit.name,
-      ...SALES_REPORT_CATEGORIES.flatMap((category) =>
-        metricCells(unit.sales.categories[category]),
-      ),
-      ...metricCells(unit.sales.total),
+      unit.sales.categories.Bebida.count,
+      unit.sales.categories.Bebida.amount.toFixed(2),
+      unit.sales.categories.Produtos.count,
+      unit.sales.categories.Produtos.amount.toFixed(2),
+      unit.sales.categories["Assinatura Nova"].count,
+      unit.sales.categories["Assinatura Nova"].amount.toFixed(2),
+      unit.sales.categories.Renovação.count,
+      unit.sales.categories.Renovação.amount.toFixed(2),
+      unit.sales.categories.Upgrade.count,
+      unit.sales.categories.Upgrade.amount.toFixed(2),
+      unit.sales.total.count,
+      unit.sales.total.amount.toFixed(2),
     ]);
     rows.push([
       "TOTAL DA REDE",
-      ...SALES_REPORT_CATEGORIES.flatMap((category) => metricCells(network[category])),
-      ...metricCells(network.all),
+      network.Bebida.count,
+      network.Bebida.amount.toFixed(2),
+      network.Produtos.count,
+      network.Produtos.amount.toFixed(2),
+      network["Assinatura Nova"].count,
+      network["Assinatura Nova"].amount.toFixed(2),
+      network.Renovação.count,
+      network.Renovação.amount.toFixed(2),
+      network.Upgrade.count,
+      network.Upgrade.amount.toFixed(2),
+      network.all.count,
+      network.all.amount.toFixed(2),
     ]);
     downloadCSV(
       `vendas-por-unidade-${start}-a-${end}.csv`,
       toCSV(
         [
           "Unidade",
-          ...SALES_REPORT_CATEGORIES.flatMap((category) => [
-            `${category} (lançamentos)`,
-            `${category} (valor)`,
-          ]),
+          "Bebidas (lançamentos)",
+          "Bebidas (valor)",
+          "Produtos (lançamentos)",
+          "Produtos (valor)",
+          "Novas assinaturas (lançamentos)",
+          "Novas assinaturas (valor)",
+          "Renovações (lançamentos)",
+          "Renovações (valor)",
+          "Upgrades (lançamentos)",
+          "Upgrades (valor)",
           "Total (lançamentos)",
           "Total (valor)",
         ],
@@ -157,7 +176,8 @@ export function SalesReport() {
             <h2 className="font-display text-xl uppercase">Vendas por unidade</h2>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Compare bebidas, novas assinaturas, renovações e upgrades no período selecionado.
+            Compare bebidas, produtos, novas assinaturas, renovações e upgrades no período
+            selecionado.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
@@ -205,7 +225,7 @@ export function SalesReport() {
         </div>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             {SALES_REPORT_CATEGORIES.map((category) => (
               <div key={category} className="rounded-xl border bg-card p-4">
                 <p className="text-xs font-semibold uppercase text-muted-foreground">{category}</p>
@@ -265,10 +285,10 @@ export function SalesReport() {
       )}
 
       <p className="rounded-lg bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-        <strong>Conferência de estoque:</strong> a quantidade de bebidas representa o número de
-        lançamentos, pois o cadastro atual não informa quantas unidades do produto foram vendidas em
-        cada lançamento. O CSV permite conferir os lançamentos e valores; para controle por item,
-        será necessário registrar produto e quantidade na venda.
+        <strong>Conferência de estoque:</strong> a quantidade de bebidas e produtos representa o
+        número de lançamentos, pois o cadastro atual não informa quais itens nem quantas unidades
+        foram vendidas em cada lançamento. O CSV permite conferir lançamentos e valores; para
+        controle por item, será necessário registrar produto e quantidade na venda.
       </p>
     </section>
   );
