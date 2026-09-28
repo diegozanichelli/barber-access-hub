@@ -363,6 +363,16 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
             <SelectItem value="asc">Mais antigos primeiro</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={viewMode} onValueChange={(v) => setViewMode(v as "shift" | "list")}>
+          <SelectTrigger aria-label="Modo de visualização">
+            <SelectValue placeholder="Visualização" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="shift">Por turno</SelectItem>
+            <SelectItem value="list">Lista simples</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {openings.length > 0 ? (

@@ -5,6 +5,9 @@ import { computeRunningCash, isOverLimit } from "@/lib/running-cash";
 import { differenceReason, explainShiftDivergence } from "@/lib/divergences";
 import { useAuditorData } from "@/hooks/use-auditor-data";
 
+/** O que está sendo encerrado: um turno em divergência ou uma retirada contestada. */
+type DisputeTarget = { kind: "shift" | "withdrawal"; id: string; label: string };
+
 const STATUS_LABEL: Record<string, string> = {
   open: "Aberto",
   pending_handover: "Pendente de repasse",
@@ -20,6 +23,34 @@ export function AuditorOverview({
   onViewShifts?: () => void;
 }) {
   const { data, isLoading } = useAuditorData();
+  const queryClient = useQueryClient();
+  const [dispute, setDispute] = useState<DisputeTarget | null>(null);
+  const [note, setNote] = useState("");
+
+  // Um turno vira 'disputed' no receive_handover e continua assim para sempre:
+  // corrigir lançamentos não mexe no status, e só estas RPCs o encerram.
+  const resolveDispute = useMutation({
+    mutationFn: async ({ kind, id, reason }: DisputeTarget & { reason: string }) => {
+      const { error } =
+        kind === "shift"
+          ? await supabase.rpc("resolve_shift_dispute", { _shift_id: id, _note: reason })
+          : await supabase.rpc("resolve_withdrawal_dispute", {
+              _withdrawal_id: id,
+              _note: reason,
+            });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["auditor-data"] });
+      toast.success("Divergência encerrada", {
+        description: "A justificativa ficou registrada no histórico de auditoria.",
+      });
+      setDispute(null);
+      setNote("");
+    },
+    onError: (error: Error) =>
+      toast.error("Erro ao encerrar a divergência", { description: friendlyError(error) }),
+  });
 
   if (isLoading || !data) {
     return (
@@ -332,6 +363,65 @@ export function AuditorOverview({
           ))}
         </div>
       </section>
+
+      <Dialog
+        open={Boolean(dispute)}
+        onOpenChange={(open) => {
+          if (!open && !resolveDispute.isPending) {
+            setDispute(null);
+            setNote("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Encerrar divergência?</DialogTitle>
+            <DialogDescription>
+              As contagens registradas não mudam — elas são o histórico do que foi contado. Isto
+              apenas marca a divergência como tratada e guarda a sua justificativa na auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          {dispute ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              <p className="font-semibold">{dispute.label}</p>
+            </div>
+          ) : null}
+          <Textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Explique como a diferença foi apurada e resolvida"
+            aria-label="Como a divergência foi resolvida"
+            disabled={resolveDispute.isPending}
+          />
+          {note.length > 0 && note.trim().length < 5 ? (
+            <p className="text-xs font-semibold text-destructive">
+              Informe pelo menos 5 caracteres.
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDispute(null);
+                setNote("");
+              }}
+              disabled={resolveDispute.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={note.trim().length < 5 || resolveDispute.isPending}
+              onClick={() => {
+                if (!dispute) return;
+                resolveDispute.mutate({ ...dispute, reason: note.trim() });
+              }}
+            >
+              {resolveDispute.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Encerrar divergência
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
