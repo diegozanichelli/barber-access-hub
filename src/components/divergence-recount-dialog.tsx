@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 type Props = {
   open: boolean;
   attempts: number;
+  direction?: "short" | "over" | null;
   submitting?: boolean;
   onRecount: () => void;
   onConfirm: (reason: string) => void;
@@ -24,6 +25,7 @@ type Props = {
 export function DivergenceRecountDialog({
   open,
   attempts,
+  direction,
   submitting,
   onRecount,
   onConfirm,
@@ -53,6 +55,20 @@ export function DivergenceRecountDialog({
             não são exibidos durante a contagem cega.
           </DialogDescription>
         </DialogHeader>
+
+        {direction ? (
+          <div className="rounded-lg border-2 border-destructive bg-destructive/15 p-3 text-center">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Sua contagem está</p>
+            <p className="text-2xl font-bold text-destructive">
+              {direction === "short" ? "A MENOS" : "A MAIS"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {direction === "short"
+                ? "Falta dinheiro em relação ao esperado."
+                : "Sobra dinheiro em relação ao esperado."}
+            </p>
+          </div>
+        ) : null}
 
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
           <strong>Tentativa {attempts}</strong>

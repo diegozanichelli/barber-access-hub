@@ -75,6 +75,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mode: CountMode;
     payload: CountPayload;
     attempts: number;
+    direction: "short" | "over" | null;
   } | null>(null);
 
   const shiftsQuery = useQuery({
