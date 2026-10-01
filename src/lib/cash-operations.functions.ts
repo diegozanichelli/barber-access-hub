@@ -140,7 +140,19 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
         _shift_id: data.shiftId,
         _quantities: data.quantities,
       });
-      if (!centralCheck.error) return { matches: Boolean(centralCheck.data) };
+      if (!centralCheck.error) {
+        if (centralCheck.data) return { matches: true, direction: null };
+        // The user-scoped check above already enforced permission; read the
+        // authoritative expected value only to tell short vs. over.
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const exp = await supabaseAdmin.rpc("shift_expected_cash", { _shift_id: data.shiftId });
+        if (exp.error) return { matches: false, direction: null };
+        const counted = calculateTotal(data.quantities as CashQuantities);
+        return {
+          matches: false,
+          direction: counted < Number(exp.data ?? 0) ? ("short" as const) : ("over" as const),
+        };
+      }
       if (!isMissingRpc(centralCheck.error)) throw centralCheck.error;
 
       // Compatibility fallback while the centralized database check is being
@@ -196,7 +208,12 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
       expected = Number(pending.closing_total ?? 0);
     }
 
-    return { matches: countMatchesExpected(data.quantities as CashQuantities, expected) };
+    const matches = countMatchesExpected(data.quantities as CashQuantities, expected);
+    const counted = calculateTotal(data.quantities as CashQuantities);
+    return {
+      matches,
+      direction: matches ? null : counted < expected ? ("short" as const) : ("over" as const),
+    };
   });
 
 /** Compatibility path used only while the authoritative open_shift RPC is absent. */
