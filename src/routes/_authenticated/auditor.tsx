@@ -60,6 +60,7 @@ function AuditorDashboard() {
           <TabsTrigger value="users">Usuários</TabsTrigger>
           <TabsTrigger value="requests">Solicitações</TabsTrigger>
           <TabsTrigger value="sales">Vendas</TabsTrigger>
+          <TabsTrigger value="bbh">Business Hub</TabsTrigger>
         </TabsList>
 
         <TabsContent value="units">
@@ -90,6 +91,9 @@ function AuditorDashboard() {
         </TabsContent>
         <TabsContent value="sales">
           <SalesReport />
+        </TabsContent>
+        <TabsContent value="bbh">
+          <EnviarCaixaBbh />
         </TabsContent>
       </Tabs>
     </DashboardShell>
