@@ -67,8 +67,8 @@ export function SubscriptionReconciliation() {
   }
 
   async function run() {
-    if (!external) return toast.error("Importe o arquivo CSV primeiro.");
-    if (!unitId) return toast.error("Selecione a unidade.");
+    if (!external) { toast.error("Importe o arquivo CSV primeiro."); return; }
+    if (!unitId) { toast.error("Selecione a unidade."); return; }
     setLoading(true);
     try {
       const ext = external.filter((r) => !r.date || r.date === date);

@@ -10,7 +10,7 @@ const CSV = `\uFEFF"ID da comanda","Filial","Profissional","Cliente","Tipo","Pag
 describe("subscription reconciliation", () => {
   test("parses PT-BR CSV and skips total row", () => {
     const rows = parseSubscriptionCSV(CSV);
-    expect(rows).toHaveLength(3);
+    expect(rows.length).toBe(3);
     expect(rows[0]).toEqual({ client: "Romulo Matos", branch: null, amount: 59.9, date: "2026-10-01", time: "18:09" });
   });
 
