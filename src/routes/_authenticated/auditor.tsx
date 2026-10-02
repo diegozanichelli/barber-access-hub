@@ -13,6 +13,7 @@ import { UserApprovals } from "@/components/user-approvals";
 import { UserManager } from "@/components/user-manager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSessionProfile } from "@/hooks/use-session-profile";
+import { SubscriptionReconciliation } from "@/components/subscription-reconciliation";
 import { requireDashboardRole } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/auditor")({
@@ -62,6 +63,7 @@ function AuditorDashboard() {
           <TabsTrigger value="partners">Sócios</TabsTrigger>
           <TabsTrigger value="requests">Solicitações</TabsTrigger>
           <TabsTrigger value="sales">Vendas</TabsTrigger>
+          <TabsTrigger value="reconciliation">Conciliação</TabsTrigger>
         </TabsList>
 
         <TabsContent value="units">
@@ -99,6 +101,9 @@ function AuditorDashboard() {
         </TabsContent>
         <TabsContent value="sales">
           <SalesReport />
+        </TabsContent>
+        <TabsContent value="reconciliation">
+          <SubscriptionReconciliation />
         </TabsContent>
       </Tabs>
     </DashboardShell>
