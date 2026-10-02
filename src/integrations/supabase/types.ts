@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -171,9 +171,11 @@ export type Database = {
           amount: number
           created_at: string
           created_by: string
+          dispute_notified_at: string | null
           id: string
           note: string | null
           partner_id: string
+          photo_url: string | null
           resolution_note: string | null
           resolved_at: string | null
           resolved_by: string | null
@@ -186,9 +188,11 @@ export type Database = {
           amount: number
           created_at?: string
           created_by: string
+          dispute_notified_at?: string | null
           id?: string
           note?: string | null
           partner_id: string
+          photo_url?: string | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -201,9 +205,11 @@ export type Database = {
           amount?: number
           created_at?: string
           created_by?: string
+          dispute_notified_at?: string | null
           id?: string
           note?: string | null
           partner_id?: string
+          photo_url?: string | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -273,6 +279,39 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       shifts: {
         Row: {
           actual_opening_total: number
@@ -280,6 +319,7 @@ export type Database = {
           closed_by: string | null
           closing_total: number | null
           created_at: string
+          dispute_notified_at: string | null
           expected_closing_total: number | null
           expected_opening_total: number
           id: string
@@ -298,6 +338,7 @@ export type Database = {
           closed_by?: string | null
           closing_total?: number | null
           created_at?: string
+          dispute_notified_at?: string | null
           expected_closing_total?: number | null
           expected_opening_total?: number
           id?: string
@@ -316,6 +357,7 @@ export type Database = {
           closed_by?: string | null
           closing_total?: number | null
           created_at?: string
+          dispute_notified_at?: string | null
           expected_closing_total?: number | null
           expected_opening_total?: number
           id?: string
@@ -338,6 +380,62 @@ export type Database = {
           },
         ]
       }
+      transaction_change_requests: {
+        Row: {
+          action: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: string
+          proposed_amount: number | null
+          proposed_description: string | null
+          reason: string
+          requested_by: string
+          status: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason: string
+          requested_by: string
+          status?: string
+          transaction_id: string
+          transaction_snapshot: Json
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          proposed_amount?: number | null
+          proposed_description?: string | null
+          reason?: string
+          requested_by?: string
+          status?: string
+          transaction_id?: string
+          transaction_snapshot?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_change_requests_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -348,6 +446,9 @@ export type Database = {
           id: string
           payment_method: Database["public"]["Enums"]["payment_method"] | null
           photo_url: string | null
+          pix_reviewed_at: string | null
+          pix_reviewed_by: string | null
+          pix_status: string | null
           reversed_at: string | null
           reversed_by: string | null
           reverses_transaction_id: string | null
@@ -365,6 +466,9 @@ export type Database = {
           id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           photo_url?: string | null
+          pix_reviewed_at?: string | null
+          pix_reviewed_by?: string | null
+          pix_status?: string | null
           reversed_at?: string | null
           reversed_by?: string | null
           reverses_transaction_id?: string | null
@@ -382,6 +486,9 @@ export type Database = {
           id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           photo_url?: string | null
+          pix_reviewed_at?: string | null
+          pix_reviewed_by?: string | null
+          pix_status?: string | null
           reversed_at?: string | null
           reversed_by?: string | null
           reverses_transaction_id?: string | null
@@ -493,16 +600,44 @@ export type Database = {
         }
         Returns: Json
       }
-      create_partner_withdrawal: {
+      create_partner_deposit: {
         Args: {
           _amount: number
           _note?: string
           _partner_id: string
-          _shift_id: string
+          _photo_url?: string
         }
         Returns: string
       }
+      create_partner_withdrawal:
+        | {
+            Args: {
+              _amount: number
+              _note?: string
+              _partner_id: string
+              _shift_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              _amount: number
+              _note?: string
+              _partner_id: string
+              _photo_url?: string
+              _shift_id: string
+            }
+            Returns: string
+          }
       current_unit_id: { Args: never; Returns: string }
+      decide_transaction_change_request: {
+        Args: { _approve: boolean; _request_id: string }
+        Returns: undefined
+      }
+      delete_empty_open_shift: {
+        Args: { _reason: string; _shift_id: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -527,15 +662,35 @@ export type Database = {
           _quantities: Json
           _unit_id: string
         }
+      }
+      master_delete_transaction: {
+        Args: { _reason: string; _transaction_id: string }
+        Returns: undefined
+      }
+      open_shift: {
+        Args: { _notes?: string; _quantities: Json; _unit_id: string }
         Returns: string
       }
+      partner_cash_balances: {
+        Args: never
+        Returns: {
+          full_name: string
+          held: number
+          partner_id: string
+          waiting: number
+        }[]
+      }
       receive_handover: {
+        Args: { _notes?: string; _pending_shift_id: string; _quantities: Json }
+        Returns: Json
+      }
+      request_transaction_change: {
         Args: {
           _notes?: string
           _pending_shift_id: string
           _quantities: Json
         }
-        Returns: Json
+        Returns: string
       }
       resolve_shift_dispute: {
         Args: { _note: string; _shift_id: string }
@@ -552,9 +707,26 @@ export type Database = {
         Args: { _note: string; _withdrawal_id: string }
         Returns: undefined
       }
+      respond_partner_withdrawal: {
+        Args: { _decision: string; _withdrawal_id: string }
+        Returns: Database["public"]["Enums"]["withdrawal_status"]
+      }
       reverse_transaction: {
         Args: { _reason: string; _transaction_id: string }
         Returns: string
+      }
+      review_pix_transaction: {
+        Args: { _transaction_id: string }
+        Returns: undefined
+      }
+      shift_expected_cash: { Args: { _shift_id: string }; Returns: number }
+      unit_expected_opening_total: {
+        Args: { _unit_id: string }
+        Returns: number
+      }
+      unit_expected_opening_total_v2: {
+        Args: { _unit_id: string }
+        Returns: number
       }
       unit_safe_balance: { Args: { _unit_id: string }; Returns: number }
     }
@@ -570,6 +742,10 @@ export type Database = {
         | "Upgrade"
         | "Despesa"
         | "Sangria"
+        | "Upgrade"
+        | "Serviços"
+        | "Produtos"
+        | "Troco"
       withdrawal_status: "pending" | "approved" | "disputed"
     }
     CompositeTypes: {
@@ -586,12 +762,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -615,11 +791,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -640,11 +816,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -665,11 +841,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -682,11 +858,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -709,6 +885,10 @@ export const Constants = {
         "Upgrade",
         "Despesa",
         "Sangria",
+        "Upgrade",
+        "Serviços",
+        "Produtos",
+        "Troco",
       ],
       withdrawal_status: ["pending", "approved", "disputed"],
     },
