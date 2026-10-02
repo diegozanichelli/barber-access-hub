@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AuditFeed } from "@/components/audit-feed";
 import { ChangeRequests } from "@/components/change-requests";
+import { EnviarCaixaBbh } from "@/components/enviar-caixa-bbh";
 import { PixApprovals } from "@/components/pix-approvals";
 import { AuditorOverview } from "@/components/auditor-overview";
 import { PartnerBalances } from "@/components/partner-balances";
@@ -62,6 +63,7 @@ function AuditorDashboard() {
           <TabsTrigger value="partners">Sócios</TabsTrigger>
           <TabsTrigger value="requests">Solicitações</TabsTrigger>
           <TabsTrigger value="sales">Vendas</TabsTrigger>
+          <TabsTrigger value="bbh">Business Hub</TabsTrigger>
         </TabsList>
 
         <TabsContent value="units">
@@ -99,6 +101,9 @@ function AuditorDashboard() {
         </TabsContent>
         <TabsContent value="sales">
           <SalesReport />
+        </TabsContent>
+        <TabsContent value="bbh">
+          <EnviarCaixaBbh />
         </TabsContent>
       </Tabs>
     </DashboardShell>
