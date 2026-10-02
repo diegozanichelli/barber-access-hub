@@ -610,26 +610,16 @@ export type Database = {
         }
         Returns: string
       }
-      create_partner_withdrawal:
-        | {
-            Args: {
-              _amount: number
-              _note?: string
-              _partner_id: string
-              _shift_id: string
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              _amount: number
-              _note?: string
-              _partner_id: string
-              _photo_url?: string
-              _shift_id: string
-            }
-            Returns: string
-          }
+      create_partner_withdrawal: {
+        Args: {
+          _amount: number
+          _note?: string
+          _partner_id: string
+          _photo_url?: string
+          _shift_id: string
+        }
+        Returns: string
+      }
       current_unit_id: { Args: never; Returns: string }
       decide_transaction_change_request: {
         Args: { _approve: boolean; _request_id: string }
