@@ -1,0 +1,2 @@
+DELETE FROM public.cash_counts WHERE shift_id IN ('162776d2-c544-4402-8b47-aea6dbdb638f','4f409c3b-ea84-46e0-b0e6-7a1ad25dc1f3');
+DELETE FROM public.shifts WHERE id IN ('162776d2-c544-4402-8b47-aea6dbdb638f','4f409c3b-ea84-46e0-b0e6-7a1ad25dc1f3');
