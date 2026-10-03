@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 type Props = {
   open: boolean;
   attempts: number;
-  direction?: "short" | "over";
+  direction?: "short" | "over" | undefined;
   submitting?: boolean;
   onRecount: () => void;
   onConfirm: (reason: string) => void;
