@@ -147,7 +147,9 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
       });
       if (!centralCheck.error) {
         if (centralCheck.data) return { matches: true };
-        const { data: exp, error: expError } = await context.supabase.rpc("shift_expected_cash", {
+        // check_shift_cash_count already validated the caller's access to this shift.
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: exp, error: expError } = await supabaseAdmin.rpc("shift_expected_cash", {
           _shift_id: data.shiftId,
         });
         if (expError) return { matches: false };
