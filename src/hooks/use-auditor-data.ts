@@ -41,6 +41,7 @@ export type WithdrawalRow = {
   partner_id: string;
   amount: number;
   status: string;
+  source: string;
   created_at: string;
 };
 export type CashCountRow = {
@@ -98,6 +99,8 @@ export type AuditorData = AuditorReferences & {
   shifts: ShiftRow[];
   transactions: TransactionRow[];
   withdrawals: WithdrawalRow[];
+  /** Retiradas dos turnos ativos (qualquer status) — para o caixa em gaveta. */
+  activeWithdrawals: WithdrawalRow[];
   cashCounts: CashCountRow[];
   safeBalances: Record<string, number>;
 };
@@ -138,6 +141,10 @@ export function useAuditorData() {
         ? await supabase.from("transactions").select("*").in("shift_id", activeIds)
         : { data: [], error: null };
       if (transactionsRes.error) throw transactionsRes.error;
+      const activeWithdrawalsRes = activeIds.length
+        ? await supabase.from("partner_withdrawals").select("*").in("shift_id", activeIds)
+        : { data: [], error: null };
+      if (activeWithdrawalsRes.error) throw activeWithdrawalsRes.error;
       const cashCountsRes = disputedIds.length
         ? await supabase
             .from("cash_counts")
@@ -160,6 +167,7 @@ export function useAuditorData() {
         shifts,
         transactions: (transactionsRes.data ?? []) as TransactionRow[],
         withdrawals: (withdrawalsRes.data ?? []) as WithdrawalRow[],
+        activeWithdrawals: (activeWithdrawalsRes.data ?? []) as WithdrawalRow[],
         cashCounts: (cashCountsRes.data ?? []) as CashCountRow[],
         safeBalances: Object.fromEntries(balances),
         names: Object.fromEntries(

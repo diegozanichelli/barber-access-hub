@@ -136,8 +136,11 @@ export function ShiftPanel({ userId, unitId }: Props) {
   });
 
   const runningCash = useMemo(
-    () => (openShift ? computeRunningCash(openShift.actual_opening_total, transactions ?? []) : 0),
-    [openShift, transactions],
+    () =>
+      openShift
+        ? computeRunningCash(openShift.actual_opening_total, transactions ?? [], withdrawals ?? [])
+        : 0,
+    [openShift, transactions, withdrawals],
   );
 
   function invalidateShift() {
@@ -673,6 +676,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
             shiftId={openShift.id}
             unitId={unitId}
             safeBalance={safeBalance}
+            drawerBalance={runningCash}
           />
         </>
       ) : null}

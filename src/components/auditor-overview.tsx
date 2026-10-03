@@ -104,6 +104,7 @@ export function AuditorOverview({
       ? computeRunningCash(
           active.actual_opening_total,
           data.transactions.filter((t) => t.shift_id === active.id),
+          data.activeWithdrawals.filter((w) => w.shift_id === active.id),
         )
       : 0;
 

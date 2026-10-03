@@ -145,22 +145,30 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
 
       // Compatibility fallback while the centralized database check is being
       // published. It mirrors shift_expected_cash exactly.
-      const [{ data: shift, error: shiftError }, { data: transactions, error: txError }] =
-        await Promise.all([
-          context.supabase
-            .from("shifts")
-            .select("status, unit_id, actual_opening_total")
-            .eq("id", data.shiftId)
-            .maybeSingle(),
-          context.supabase
-            .from("transactions")
-            .select(
-              "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
-            )
-            .eq("shift_id", data.shiftId),
-        ]);
+      const [
+        { data: shift, error: shiftError },
+        { data: transactions, error: txError },
+        { data: shiftWithdrawals, error: wdError },
+      ] = await Promise.all([
+        context.supabase
+          .from("shifts")
+          .select("status, unit_id, actual_opening_total")
+          .eq("id", data.shiftId)
+          .maybeSingle(),
+        context.supabase
+          .from("transactions")
+          .select(
+            "transaction_type, payment_method, category, amount, reverses_transaction_id, reversed_at",
+          )
+          .eq("shift_id", data.shiftId),
+        context.supabase
+          .from("partner_withdrawals")
+          .select("amount, status, source")
+          .eq("shift_id", data.shiftId),
+      ]);
       if (shiftError) throw shiftError;
       if (txError) throw txError;
+      if (wdError) throw wdError;
       if (!shift || shift.status !== "open") {
         throw new Error("Este turno não está disponível para conferência.");
       }
@@ -173,7 +181,11 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
       if (profile?.status !== "approved" || profile.unit_id !== shift.unit_id) {
         throw new Error("Você não tem permissão para conferir este caixa.");
       }
-      expected = computeExpectedClosing(shift.actual_opening_total, transactions ?? []);
+      expected = computeExpectedClosing(
+        shift.actual_opening_total,
+        transactions ?? [],
+        shiftWithdrawals ?? [],
+      );
     } else {
       const { data: pending, error } = await context.supabase
         .from("shifts")

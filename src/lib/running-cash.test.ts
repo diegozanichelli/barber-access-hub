@@ -82,6 +82,20 @@ describe("computeRunningCash", () => {
       ]),
     ).toBe(965.25);
   });
+
+  test("subtrai retirada de sócio que saiu da gaveta, não a do cofre", () => {
+    expect(
+      computeRunningCash(
+        500,
+        [{ transaction_type: "income", payment_method: "Dinheiro", amount: 100 }],
+        [
+          { status: "pending", amount: 400, source: "drawer" },
+          { status: "approved", amount: 150, source: "safe" },
+          { status: "pending", amount: 10 }, // sem source = cofre, não desconta
+        ],
+      ),
+    ).toBe(200); // 500 + 100 - 400
+  });
 });
 
 describe("computeSafeBalance", () => {
@@ -109,6 +123,18 @@ describe("computeSafeBalance", () => {
         ],
       ),
     ).toBe(300);
+  });
+
+  test("só desconta do cofre as retiradas do cofre (gaveta não afeta o cofre)", () => {
+    expect(
+      computeSafeBalance(
+        [{ transaction_type: "expense", category: "Sangria", payment_method: null, amount: 500 }],
+        [
+          { status: "approved", amount: 150, source: "safe" },
+          { status: "pending", amount: 400, source: "drawer" }, // saiu da gaveta: ignora
+        ],
+      ),
+    ).toBe(350); // 500 - 150
   });
 });
 
