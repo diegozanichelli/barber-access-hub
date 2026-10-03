@@ -102,6 +102,11 @@ async function expectedOpeningTotal(supabase: SupabaseClient<Database>, unitId: 
   return computeExpectedClosing(previous.actual_opening_total, transactions ?? []);
 }
 
+/** Only the direction (short/over) is revealed — never the expected value or difference. */
+function directionOf(q: CashQuantities, expected: number): "short" | "over" {
+  return calculateTotal(q) < expected ? "short" : "over";
+}
+
 /**
  * Blind preflight: only says whether the count matches. Expected totals and
  * differences deliberately stay on the authenticated server.
@@ -140,7 +145,19 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
         _shift_id: data.shiftId,
         _quantities: data.quantities,
       });
-      if (!centralCheck.error) return { matches: Boolean(centralCheck.data) };
+      if (!centralCheck.error) {
+        if (centralCheck.data) return { matches: true };
+        // check_shift_cash_count already validated the caller's access to this shift.
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: exp, error: expError } = await supabaseAdmin.rpc("shift_expected_cash", {
+          _shift_id: data.shiftId,
+        });
+        if (expError) return { matches: false };
+        return {
+          matches: false,
+          direction: directionOf(data.quantities as CashQuantities, Number(exp ?? 0)),
+        };
+      }
       if (!isMissingRpc(centralCheck.error)) throw centralCheck.error;
 
       // Compatibility fallback while the centralized database check is being
@@ -208,7 +225,9 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
       expected = Number(pending.closing_total ?? 0);
     }
 
-    return { matches: countMatchesExpected(data.quantities as CashQuantities, expected) };
+    const q = data.quantities as CashQuantities;
+    if (countMatchesExpected(q, expected)) return { matches: true };
+    return { matches: false, direction: directionOf(q, expected) };
   });
 
 /** Compatibility path used only while the authoritative open_shift RPC is absent. */

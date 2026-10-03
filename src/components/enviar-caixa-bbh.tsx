@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatBRL } from "@/lib/cash";
-import { DATA_CORTE, FILIAL_NOME } from "@/lib/ponte-caixa";
+import { DATA_CORTE, FILIAL_NOME, hojeLocal } from "@/lib/ponte-caixa";
 import { enviarCaixaBbh, previewCaixaBbh } from "@/lib/ponte-caixa.functions";
 
 type Resumo = {
@@ -26,7 +26,7 @@ type Resumo = {
   porUnidade: { filial_id: string; entradas: number; saidas: number; qtd: number }[];
 };
 
-const hoje = () => new Date().toISOString().slice(0, 10);
+const hoje = hojeLocal;
 
 export function EnviarCaixaBbh() {
   const preview = useServerFn(previewCaixaBbh);
