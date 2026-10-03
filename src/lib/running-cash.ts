@@ -12,18 +12,23 @@ export type CashTransaction = {
 export type CashWithdrawal = {
   status: string;
   amount: number | string;
+  /** 'drawer' = saiu da gaveta; 'safe' = saiu do cofre. Ausente = 'safe'. */
+  source?: string | null;
 };
 
 /**
  * Running physical cash in the drawer:
- * actual counted opening + cash incomes - expenses - safe drops (sangrias).
+ * actual counted opening + cash incomes - expenses - safe drops (sangrias)
+ * - partner withdrawals taken straight from the drawer (source='drawer').
  *
- * Partner withdrawals are NOT subtracted here: the money already left the
- * drawer as a safe drop, and the partner takes it from the safe.
+ * Partner withdrawals from the safe (source='safe') are NOT subtracted here:
+ * that money already left the drawer as a safe drop, and the partner takes it
+ * from the safe.
  */
 export function computeRunningCash(
   actualOpeningTotal: number | string | null | undefined,
   transactions: CashTransaction[] = [],
+  withdrawals: CashWithdrawal[] = [],
 ): number {
   let total = Number(actualOpeningTotal ?? 0);
 
@@ -44,6 +49,11 @@ export function computeRunningCash(
     }
   }
 
+  // Retiradas de sócio que saíram da gaveta reduzem o caixa físico.
+  for (const w of withdrawals) {
+    if (w.source === "drawer") total -= Number(w.amount ?? 0);
+  }
+
   return Math.round(total * 100) / 100;
 }
 
@@ -51,9 +61,11 @@ export function computeRunningCash(
 export const computeExpectedClosing = computeRunningCash;
 
 /**
- * Saldo do cofre: sangrias menos retiradas de sócio em qualquer status
- * (pendente, confirmada e contestada) — o dinheiro saiu fisicamente do cofre;
- * "contestada" é um alerta para a auditoria, não um estorno.
+ * Saldo do cofre: sangrias menos retiradas de sócio que saíram DO COFRE
+ * (source='safe'; linhas antigas sem source contam como 'safe'), em qualquer
+ * status (pendente, confirmada e contestada) — o dinheiro saiu fisicamente do
+ * cofre; "contestada" é um alerta para a auditoria, não um estorno. Retiradas
+ * da gaveta (source='drawer') não tocam o cofre.
  *
  * O cofre é acumulado por UNIDADE (não zera a cada turno): passe todos os
  * lançamentos e retiradas da unidade, não apenas os do turno aberto.
@@ -76,7 +88,7 @@ export function computeSafeBalance(
   }
 
   for (const w of withdrawals) {
-    total -= Number(w.amount ?? 0);
+    if ((w.source ?? "safe") === "safe") total -= Number(w.amount ?? 0);
   }
 
   return Math.round(total * 100) / 100;
