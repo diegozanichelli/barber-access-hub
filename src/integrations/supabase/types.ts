@@ -207,8 +207,8 @@ export type Database = {
           resolved_at: string | null
           resolved_by: string | null
           shift_id: string
-          status: Database["public"]["Enums"]["withdrawal_status"]
           source: string
+          status: Database["public"]["Enums"]["withdrawal_status"]
           unit_id: string
           updated_at: string
         }
@@ -225,8 +225,8 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           shift_id: string
-          status?: Database["public"]["Enums"]["withdrawal_status"]
           source?: string
+          status?: Database["public"]["Enums"]["withdrawal_status"]
           unit_id: string
           updated_at?: string
         }
@@ -243,8 +243,8 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           shift_id?: string
-          status?: Database["public"]["Enums"]["withdrawal_status"]
           source?: string
+          status?: Database["public"]["Enums"]["withdrawal_status"]
           unit_id?: string
           updated_at?: string
         }
