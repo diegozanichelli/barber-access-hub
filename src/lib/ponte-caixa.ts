@@ -123,7 +123,23 @@ export type Movimento = {
   descricao: string;
 };
 
-const dataDoCaixa = (iso: string) => iso.slice(0, 10);
+/** Fuso das unidades (Manaus, UTC-4, sem horário de verão). */
+export const FUSO_OFFSET_HORAS = -4;
+
+/** Data local (Manaus) do lançamento, em YYYY-MM-DD. */
+export const dataDoCaixa = (iso: string) =>
+  new Date(new Date(iso).getTime() + FUSO_OFFSET_HORAS * 3_600_000).toISOString().slice(0, 10);
+
+/** Limites UTC de um período de datas locais (Manaus), inclusivo. */
+export function periodoUtc(de: string, ate: string) {
+  const off = -FUSO_OFFSET_HORAS * 3_600_000;
+  const inicio = new Date(Date.parse(`${de}T00:00:00.000Z`) + off).toISOString();
+  const fim = new Date(Date.parse(`${ate}T23:59:59.999Z`) + off).toISOString();
+  return { inicio, fim };
+}
+
+/** Hoje no fuso das unidades. */
+export const hojeLocal = () => dataDoCaixa(new Date().toISOString());
 
 /**
  * Traduz uma transaction do BAH para um Movimento do BBH, ou `null` quando ela

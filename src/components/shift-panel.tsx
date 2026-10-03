@@ -75,6 +75,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
     mode: CountMode;
     payload: CountPayload;
     attempts: number;
+    direction?: "short" | "over";
   } | null>(null);
 
   const shiftsQuery = useQuery({
@@ -288,7 +289,12 @@ export function ShiftPanel({ userId, unitId }: Props) {
         persistCount(mode, payload);
       } else {
         setCalcMode(null);
-        setPendingDivergence({ mode, payload, attempts: attempt });
+        setPendingDivergence({
+          mode,
+          payload,
+          attempts: attempt,
+          direction: "direction" in result ? result.direction : undefined,
+        });
       }
     } catch (error) {
       toast.error("Não foi possível conferir a contagem", { description: friendlyError(error) });
@@ -647,6 +653,7 @@ export function ShiftPanel({ userId, unitId }: Props) {
       <DivergenceRecountDialog
         open={Boolean(pendingDivergence)}
         attempts={pendingDivergence?.attempts ?? 0}
+        direction={pendingDivergence?.direction}
         submitting={openMutation.isPending || closeMutation.isPending || handoverMutation.isPending}
         onRecount={() => {
           if (!pendingDivergence) return;
