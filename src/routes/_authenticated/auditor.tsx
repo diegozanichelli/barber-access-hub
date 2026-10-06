@@ -8,6 +8,7 @@ import { AuditorOverview } from "@/components/auditor-overview";
 import { PartnerBalances } from "@/components/partner-balances";
 import { ShiftHistory } from "@/components/shift-history";
 import { SalesReport } from "@/components/sales-report";
+import { SubscriptionReconciliation } from "@/components/subscription-reconciliation";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { UnitManager } from "@/components/unit-manager";
 import { UserApprovals } from "@/components/user-approvals";
@@ -63,6 +64,7 @@ function AuditorDashboard() {
           <TabsTrigger value="partners">Sócios</TabsTrigger>
           <TabsTrigger value="requests">Solicitações</TabsTrigger>
           <TabsTrigger value="sales">Vendas</TabsTrigger>
+          <TabsTrigger value="reconciliation">Conciliação</TabsTrigger>
           <TabsTrigger value="bbh">Business Hub</TabsTrigger>
         </TabsList>
 
@@ -101,6 +103,9 @@ function AuditorDashboard() {
         </TabsContent>
         <TabsContent value="sales">
           <SalesReport />
+        </TabsContent>
+        <TabsContent value="reconciliation">
+          <SubscriptionReconciliation />
         </TabsContent>
         <TabsContent value="bbh">
           <EnviarCaixaBbh />
