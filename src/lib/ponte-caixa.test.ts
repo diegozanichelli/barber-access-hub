@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mapMovimento, prepararEnvio, type BahTransaction, type Movimento } from "./ponte-caixa";
+import {
+  hojeManaus,
+  intervaloManausUtc,
+  mapMovimento,
+  prepararEnvio,
+  type BahTransaction,
+  type Movimento,
+} from "./ponte-caixa";
 
 const base: BahTransaction = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -88,5 +95,24 @@ describe("prepararEnvio", () => {
     expect(pn?.entradas).toBe(80);
     expect(pn?.saidas).toBe(0);
     expect(pn?.qtd).toBe(2);
+  });
+});
+
+describe("fuso de Manaus (UTC-4)", () => {
+  test("intervalo cobre o dia inteiro de Manaus em UTC (venda das 21h entra)", () => {
+    const { inicio, fim } = intervaloManausUtc("2026-10-05", "2026-10-05");
+    // 00:00 Manaus = 04:00 UTC; 23:59:59.999 Manaus = 03:59:59.999 UTC do dia seguinte.
+    expect(inicio).toBe("2026-10-05T04:00:00.000Z");
+    expect(fim).toBe("2026-10-06T03:59:59.999Z");
+
+    // Uma venda às 21h de 05/10 em Manaus é 01:00Z de 06/10 — cai dentro do dia 05.
+    const venda21h = "2026-10-06T01:00:00.000Z";
+    expect(venda21h >= inicio && venda21h <= fim).toBe(true);
+  });
+
+  test("hojeManaus retorna o dia de Manaus, não o de UTC, às 23h local", () => {
+    // 05/10 23:00 Manaus = 06/10 03:00 UTC. Em UTC seria "2026-10-06"; em Manaus é "2026-10-05".
+    const instante = new Date("2026-10-06T03:00:00.000Z");
+    expect(hojeManaus(instante)).toBe("2026-10-05");
   });
 });

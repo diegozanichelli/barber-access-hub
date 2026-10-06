@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   prepararEnvio,
+  intervaloManausUtc,
   EMPRESA_BBH,
   UNIDADE_FILIAL,
   type BahTransaction,
@@ -32,8 +33,7 @@ type CaixaImportResult = {
 async function carregarResumo(de: string, ate: string): Promise<ResumoEnvio> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const unitIds = Object.keys(UNIDADE_FILIAL);
-  const inicio = `${de}T00:00:00.000Z`;
-  const fim = `${ate}T23:59:59.999Z`;
+  const { inicio, fim } = intervaloManausUtc(de, ate);
 
   const { data, error } = await supabaseAdmin
     .from("transactions")
