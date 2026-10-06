@@ -17,6 +17,32 @@ export const EMPRESA_BBH = "0bd0c649-740d-4370-a727-1f5ef52475a1";
 export const DATA_CORTE = "2026-10-01";
 
 /**
+ * Manaus é UTC−4 o ano inteiro (sem horário de verão). As datas do caixa são
+ * sempre em horário de Manaus, mas created_at é guardado em UTC — por isso o
+ * dia precisa ser convertido com este deslocamento, nunca com toISOString()
+ * (que usaria UTC e jogaria tudo depois das 20h para o dia seguinte).
+ */
+export const MANAUS_OFFSET = "-04:00";
+
+/** Dia de hoje em Manaus (YYYY-MM-DD), não em UTC. */
+export function hojeManaus(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Manaus" }).format(now);
+}
+
+/**
+ * Converte um intervalo de dias de Manaus [de, ate] (YYYY-MM-DD) nos instantes
+ * UTC que o cobrem por inteiro: do começo do dia `de` ao fim do dia `ate` em
+ * Manaus. É isso que deve filtrar created_at, para a venda das 21h entrar no
+ * dia certo.
+ */
+export function intervaloManausUtc(de: string, ate: string): { inicio: string; fim: string } {
+  return {
+    inicio: new Date(`${de}T00:00:00.000${MANAUS_OFFSET}`).toISOString(),
+    fim: new Date(`${ate}T23:59:59.999${MANAUS_OFFSET}`).toISOString(),
+  };
+}
+
+/**
  * De-para unidade (BAH) -> filial (BBH). Só as unidades aqui sincronizam; as
  * demais (ex.: Basic - Cidade Nova) seguem 100% manuais no BBH.
  */
