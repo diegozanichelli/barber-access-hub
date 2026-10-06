@@ -140,7 +140,20 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
         _shift_id: data.shiftId,
         _quantities: data.quantities,
       });
-      if (!centralCheck.error) return { matches: Boolean(centralCheck.data) };
+      if (!centralCheck.error) {
+        if (centralCheck.data) return { matches: true };
+        // Não bateu: dizemos só se está a MENOS ou a MAIS, sem revelar o valor
+        // esperado (continua contagem cega). O número fica no servidor.
+        const expectedRes = await context.supabase.rpc("shift_expected_cash", {
+          _shift_id: data.shiftId,
+        });
+        if (expectedRes.error) return { matches: false };
+        const counted = calculateTotal(data.quantities as CashQuantities);
+        return {
+          matches: false,
+          direction: counted < Number(expectedRes.data ?? 0) ? "short" : "over",
+        } as const;
+      }
       if (!isMissingRpc(centralCheck.error)) throw centralCheck.error;
 
       // Compatibility fallback while the centralized database check is being
@@ -208,7 +221,12 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
       expected = Number(pending.closing_total ?? 0);
     }
 
-    return { matches: countMatchesExpected(data.quantities as CashQuantities, expected) };
+    const counted = calculateTotal(data.quantities as CashQuantities);
+    const matches = countMatchesExpected(data.quantities as CashQuantities, expected);
+    return {
+      matches,
+      ...(matches ? {} : { direction: counted < expected ? "short" : ("over" as const) }),
+    };
   });
 
 /** Compatibility path used only while the authoritative open_shift RPC is absent. */
