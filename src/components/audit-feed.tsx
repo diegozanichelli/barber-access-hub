@@ -21,9 +21,11 @@ import {
 } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipt-thumb";
 import { BlindCalculator } from "@/components/blind-calculator";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
+import { hojeManaus, intervaloManausUtc } from "@/lib/ponte-caixa";
 import { friendlyError } from "@/lib/errors";
 import { archiveEmptyOpening, correctOpeningOnServer } from "@/lib/opening-admin.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,6 +63,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const [category, setCategory] = useState<CategoryFilter>(ALL);
   const [paymentMethod, setPaymentMethod] = useState<PaymentFilter>(ALL);
   const [order, setOrder] = useState<"desc" | "asc">("desc");
+  const [day, setDay] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
   const [viewMode, setViewMode] = useState<"shift" | "list">("shift");
   const [shiftPage, setShiftPage] = useState(0);
@@ -79,8 +83,8 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     openedAt: string;
   } | null>(null);
 
-  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order]);
-  useEffect(() => setShiftPage(0), [unitId]);
+  useEffect(() => setPage(0), [unitId, type, category, paymentMethod, order, day]);
+  useEffect(() => setShiftPage(0), [unitId, day]);
   useEffect(() => {
     if (selectedUnitId) setUnitId(selectedUnitId);
   }, [selectedUnitId]);
@@ -214,7 +218,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   });
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order],
+    queryKey: ["audit-transactions", page, unitId, type, category, paymentMethod, order, day],
     refetchInterval: 30_000,
     queryFn: async () => {
       let query = supabase
@@ -223,6 +227,10 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         .order("created_at", { ascending: order === "asc" })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
       if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      if (day) {
+        const { inicio, fim } = intervaloManausUtc(day, day);
+        query = query.gte("created_at", inicio).lte("created_at", fim);
+      }
       if (type !== ALL) query = query.eq("transaction_type", type);
       if (category === "Upgrade") {
         query = query.eq("description", UPGRADE_DESCRIPTION_MARKER);
@@ -243,7 +251,7 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const count = pageData?.count ?? 0;
 
   const { data: shiftPageData, isLoading: isLoadingShifts } = useQuery({
-    queryKey: ["audit-shift-feed", shiftPage, unitId],
+    queryKey: ["audit-shift-feed", shiftPage, unitId, day],
     enabled: viewMode === "shift",
     refetchInterval: 30_000,
     queryFn: async () => {
@@ -254,6 +262,10 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
         .order("opened_at", { ascending: false })
         .range(shiftPage * SHIFT_PAGE_SIZE, shiftPage * SHIFT_PAGE_SIZE + SHIFT_PAGE_SIZE - 1);
       if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      if (day) {
+        const { inicio, fim } = intervaloManausUtc(day, day);
+        query = query.gte("opened_at", inicio).lte("opened_at", fim);
+      }
       const { data, error, count } = await query;
       if (error) throw error;
       return { rows: (data ?? []) as ShiftRow[], count: count ?? 0 };
@@ -304,38 +316,86 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
   const footerPageSize = viewMode === "shift" ? SHIFT_PAGE_SIZE : PAGE_SIZE;
   const setFooterPage = viewMode === "shift" ? setShiftPage : setPage;
 
-  function handleExport() {
-    const csv = toCSV(
-      [
-        "Data",
-        "Unidade",
-        "Tipo",
-        "Categoria",
-        "Cliente",
-        "Pagamento",
-        "Valor",
-        "Descrição",
-        "Registrado por",
-        "Comprovante",
-      ],
-      rows.map((t) => [
-        new Date(t.created_at).toLocaleString("pt-BR"),
-        references?.unitNames[t.unit_id] ?? "",
-        t.transaction_type === "income"
-          ? "Entrada"
-          : t.category === "Sangria"
-            ? "Sangria (cofre)"
-            : "Despesa",
-        displayedIncomeCategory(t.category, t.description),
-        t.client_name ?? "",
-        t.payment_method ?? "",
-        Number(t.amount).toFixed(2).replace(".", ","),
-        t.description === UPGRADE_DESCRIPTION_MARKER ? "" : (t.description ?? ""),
-        references?.names[t.user_id] ?? "",
-        t.photo_url ? "Sim" : "Não",
-      ]),
-    );
-    downloadCSV(`lancamentos-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  // Busca TODOS os lançamentos que batem com os filtros atuais (não só a página
+  // visível), paginando no banco. Assim a exportação cobre o dia inteiro.
+  async function fetchAllForExport(): Promise<TransactionRow[]> {
+    const EXPORT_PAGE = 1000;
+    const all: TransactionRow[] = [];
+    for (let from = 0; ; from += EXPORT_PAGE) {
+      let query = supabase
+        .from("transactions")
+        .select("*")
+        .order("created_at", { ascending: order === "asc" })
+        .range(from, from + EXPORT_PAGE - 1);
+      if (unitId !== ALL) query = query.eq("unit_id", unitId);
+      if (day) {
+        const { inicio, fim } = intervaloManausUtc(day, day);
+        query = query.gte("created_at", inicio).lte("created_at", fim);
+      }
+      if (type !== ALL) query = query.eq("transaction_type", type);
+      if (category === "Upgrade") {
+        query = query.eq("description", UPGRADE_DESCRIPTION_MARKER);
+      } else if (category === "Renovação") {
+        query = query
+          .eq("category", category)
+          .or(`description.is.null,description.neq.${UPGRADE_DESCRIPTION_MARKER}`);
+      } else if (category !== ALL) {
+        query = query.eq("category", category);
+      }
+      if (paymentMethod !== ALL) query = query.eq("payment_method", paymentMethod);
+      const { data, error } = await query;
+      if (error) throw error;
+      const pageRows = (data ?? []) as TransactionRow[];
+      all.push(...pageRows);
+      if (pageRows.length < EXPORT_PAGE) break;
+    }
+    return all;
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const exportRows = await fetchAllForExport();
+      if (exportRows.length === 0) {
+        toast.info("Nenhum lançamento para exportar com os filtros atuais.");
+        return;
+      }
+      const csv = toCSV(
+        [
+          "Data",
+          "Unidade",
+          "Tipo",
+          "Categoria",
+          "Cliente",
+          "Pagamento",
+          "Valor",
+          "Descrição",
+          "Registrado por",
+          "Comprovante",
+        ],
+        exportRows.map((t) => [
+          new Date(t.created_at).toLocaleString("pt-BR"),
+          references?.unitNames[t.unit_id] ?? "",
+          t.transaction_type === "income"
+            ? "Entrada"
+            : t.category === "Sangria"
+              ? "Sangria (cofre)"
+              : "Despesa",
+          displayedIncomeCategory(t.category, t.description),
+          t.client_name ?? "",
+          t.payment_method ?? "",
+          Number(t.amount).toFixed(2).replace(".", ","),
+          t.description === UPGRADE_DESCRIPTION_MARKER ? "" : (t.description ?? ""),
+          references?.names[t.user_id] ?? "",
+          t.photo_url ? "Sim" : "Não",
+        ]),
+      );
+      downloadCSV(`lancamentos-${day || hojeManaus()}.csv`, csv);
+    } catch (error) {
+      toast.error("Erro ao exportar lançamentos", { description: friendlyError(error) });
+    } finally {
+      setExporting(false);
+    }
   }
 
   function renderTransactionRow(t: TransactionRow) {
@@ -431,13 +491,47 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
     <section className="surface-panel p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg">Feed de lançamentos e provas</h2>
-        <Button size="sm" variant="secondary" onClick={handleExport} disabled={rows.length === 0}>
-          <Download className="size-4" />
-          Exportar página CSV
+        <Button size="sm" variant="secondary" onClick={handleExport} disabled={exporting}>
+          {exporting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
+          {day ? "Exportar dia (CSV)" : "Exportar tudo (CSV)"}
         </Button>
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="flex items-center gap-1">
+          <Input
+            type="date"
+            aria-label="Filtrar por dia"
+            value={day}
+            max={hojeManaus()}
+            onChange={(e) => setDay(e.target.value)}
+            className="flex-1"
+          />
+          {day ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setDay("")}
+              aria-label="Limpar filtro de dia"
+            >
+              Limpar
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setDay(hojeManaus())}
+              aria-label="Filtrar pelo dia de hoje"
+            >
+              Hoje
+            </Button>
+          )}
+        </div>
+
         <Select value={unitId} onValueChange={setUnitId}>
           <SelectTrigger aria-label="Filtrar por unidade">
             <SelectValue placeholder="Unidade" />
