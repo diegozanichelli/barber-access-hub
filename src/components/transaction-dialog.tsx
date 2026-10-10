@@ -387,9 +387,15 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                   </span>
                 </div>
                 {items.map((row, index) => (
-                  <div key={row.id} className="rounded-lg border border-border/60 p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">
+                  <div
+                    key={row.id}
+                    className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm"
+                  >
+                    <div className="flex items-center gap-2 border-b border-border/60 bg-primary/10 px-3 py-2">
+                      <span className="grid size-6 place-items-center rounded-full bg-primary text-xs font-bold tabular-nums text-primary-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="text-xs font-bold uppercase tracking-wide text-primary">
                         Item {index + 1}
                       </span>
                       {items.length > 1 ? (
@@ -397,6 +403,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                           type="button"
                           size="icon"
                           variant="ghost"
+                          className="ml-auto size-7"
                           aria-label={`Remover item ${index + 1}`}
                           onClick={() => setItems((prev) => prev.filter((i) => i.id !== row.id))}
                         >
@@ -404,45 +411,58 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                         </Button>
                       ) : null}
                     </div>
-                    <div className="mt-2 grid gap-2">
-                      <Select
-                        value={row.category}
-                        onValueChange={(v) =>
-                          setItems((prev) =>
-                            prev.map((i) =>
-                              i.id === row.id ? { ...i, category: v as IncomeCategory } : i,
-                            ),
-                          )
-                        }
-                      >
-                        <SelectTrigger
-                          className="h-12"
-                          aria-label={`Categoria do item ${index + 1}`}
+                    <div className="grid gap-3 p-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`item-cat-${row.id}`}>O que foi vendido</Label>
+                        <Select
+                          value={row.category}
+                          onValueChange={(v) =>
+                            setItems((prev) =>
+                              prev.map((i) =>
+                                i.id === row.id ? { ...i, category: v as IncomeCategory } : i,
+                              ),
+                            )
+                          }
                         >
-                          <SelectValue placeholder="Selecione a categoria" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {INCOME_CATEGORIES.map((c) => (
-                            <SelectItem key={c} value={c}>
-                              {c}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        className="h-12 text-lg"
-                        inputMode="decimal"
-                        aria-label={`Valor do item ${index + 1}`}
-                        value={row.amount}
-                        onChange={(e) =>
-                          setItems((prev) =>
-                            prev.map((i) =>
-                              i.id === row.id ? { ...i, amount: e.target.value } : i,
-                            ),
-                          )
-                        }
-                        placeholder="0,00"
-                      />
+                          <SelectTrigger
+                            id={`item-cat-${row.id}`}
+                            className="h-12"
+                            aria-label={`Categoria do item ${index + 1}`}
+                          >
+                            <SelectValue placeholder="Selecione a categoria" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {INCOME_CATEGORIES.map((c) => (
+                              <SelectItem key={c} value={c}>
+                                {c}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`item-val-${row.id}`}>Valor deste item</Label>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
+                            R$
+                          </span>
+                          <Input
+                            id={`item-val-${row.id}`}
+                            className="h-12 pl-10 text-lg"
+                            inputMode="decimal"
+                            aria-label={`Valor do item ${index + 1}`}
+                            value={row.amount}
+                            onChange={(e) =>
+                              setItems((prev) =>
+                                prev.map((i) =>
+                                  i.id === row.id ? { ...i, amount: e.target.value } : i,
+                                ),
+                              )
+                            }
+                            placeholder="0,00"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -468,9 +488,13 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
               <div className="space-y-3">
                 <Label>Formas de pagamento</Label>
                 {payments.map((row, index) => (
-                  <div key={row.id} className="rounded-lg border border-border/60 p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">
+                  <div
+                    key={row.id}
+                    className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm"
+                  >
+                    <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-3 py-2">
+                      <span className="size-2 rounded-full bg-primary" aria-hidden />
+                      <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                         Pagamento {index + 1}
                       </span>
                       {payments.length > 1 ? (
@@ -478,6 +502,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                           type="button"
                           size="icon"
                           variant="ghost"
+                          className="ml-auto size-7"
                           aria-label={`Remover pagamento ${index + 1}`}
                           onClick={() => setPayments((prev) => prev.filter((p) => p.id !== row.id))}
                         >
@@ -485,45 +510,58 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                         </Button>
                       ) : null}
                     </div>
-                    <div className="mt-2 grid gap-2">
-                      <Select
-                        value={row.method}
-                        onValueChange={(v) =>
-                          setPayments((prev) =>
-                            prev.map((p) =>
-                              p.id === row.id ? { ...p, method: v as PaymentMethod } : p,
-                            ),
-                          )
-                        }
-                      >
-                        <SelectTrigger
-                          className="h-12"
-                          aria-label={`Forma de pagamento ${index + 1}`}
+                    <div className="grid gap-3 p-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`pay-method-${row.id}`}>Forma de pagamento</Label>
+                        <Select
+                          value={row.method}
+                          onValueChange={(v) =>
+                            setPayments((prev) =>
+                              prev.map((p) =>
+                                p.id === row.id ? { ...p, method: v as PaymentMethod } : p,
+                              ),
+                            )
+                          }
                         >
-                          <SelectValue placeholder="Forma de pagamento" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PAYMENT_METHODS.map((m) => (
-                            <SelectItem key={m} value={m}>
-                              {m}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        className="h-12 text-lg"
-                        inputMode="decimal"
-                        aria-label={`Valor do pagamento ${index + 1}`}
-                        value={row.amount}
-                        onChange={(e) =>
-                          setPayments((prev) =>
-                            prev.map((p) =>
-                              p.id === row.id ? { ...p, amount: e.target.value } : p,
-                            ),
-                          )
-                        }
-                        placeholder="0,00"
-                      />
+                          <SelectTrigger
+                            id={`pay-method-${row.id}`}
+                            className="h-12"
+                            aria-label={`Forma de pagamento ${index + 1}`}
+                          >
+                            <SelectValue placeholder="Forma de pagamento" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_METHODS.map((m) => (
+                              <SelectItem key={m} value={m}>
+                                {m}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`pay-val-${row.id}`}>Valor pago</Label>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
+                            R$
+                          </span>
+                          <Input
+                            id={`pay-val-${row.id}`}
+                            className="h-12 pl-10 text-lg"
+                            inputMode="decimal"
+                            aria-label={`Valor do pagamento ${index + 1}`}
+                            value={row.amount}
+                            onChange={(e) =>
+                              setPayments((prev) =>
+                                prev.map((p) =>
+                                  p.id === row.id ? { ...p, amount: e.target.value } : p,
+                                ),
+                              )
+                            }
+                            placeholder="0,00"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
