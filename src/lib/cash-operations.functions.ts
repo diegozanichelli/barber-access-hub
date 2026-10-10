@@ -144,7 +144,14 @@ export const checkCountDivergence = createServerFn({ method: "POST" })
         if (centralCheck.data) return { matches: true };
         // Não bateu: dizemos só se está a MENOS ou a MAIS, sem revelar o valor
         // esperado (continua contagem cega). O número fica no servidor.
-        const expectedRes = await context.supabase.rpc("shift_expected_cash", {
+        //
+        // shift_expected_cash é SECURITY DEFINER mas NÃO é liberada para
+        // 'authenticated' de propósito: se o atendente pudesse executá-la pelo
+        // navegador, veria o valor esperado e a contagem deixaria de ser cega.
+        // Por isso a chamada aqui usa a credencial de serviço (admin) — o valor
+        // nunca sai do servidor; só a direção (a menos/a mais) é devolvida.
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const expectedRes = await supabaseAdmin.rpc("shift_expected_cash", {
           _shift_id: data.shiftId,
         });
         if (expectedRes.error) return { matches: false };
