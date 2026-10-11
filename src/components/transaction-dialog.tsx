@@ -612,7 +612,29 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                         className="h-12 text-lg"
                         inputMode="decimal"
                         value={cashReceived}
-                        onChange={(e) => setCashReceived(e.target.value)}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setCashReceived(raw);
+                          // Nota maior: ajusta o "Valor pago" em dinheiro para o que
+                          // realmente entra no caixa (total da comanda menos o que já
+                          // está em outras formas de pagamento).
+                          const delivered = parseAmount(raw);
+                          if (!Number.isFinite(delivered) || delivered <= itemsTotal) return;
+                          const nonCash = parsedPayments
+                            .filter((p) => p.method !== "Dinheiro" && Number.isFinite(p.value))
+                            .reduce((sum, p) => sum + p.value, 0);
+                          const neededCash =
+                            Math.round((itemsTotal - nonCash) * 100) / 100;
+                          if (neededCash <= 0) return;
+                          const formatted = neededCash.toFixed(2).replace(".", ",");
+                          setPayments((prev) => {
+                            const cashIdx = prev.findIndex((p) => p.method === "Dinheiro");
+                            if (cashIdx < 0) return prev;
+                            return prev.map((p, i) =>
+                              i === cashIdx ? { ...p, amount: formatted } : p,
+                            );
+                          });
+                        }}
                         placeholder="0,00"
                       />
                       {changeInvalid ? (
