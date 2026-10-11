@@ -647,6 +647,11 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                             <span className="text-sm text-muted-foreground">Troco a devolver</span>
                             <span className="text-lg font-semibold">{formatBRL(changeValue)}</span>
                           </div>
+                          <p className="rounded-lg border border-primary/40 bg-primary/10 p-3 text-xs font-semibold">
+                            Cliente entregou {formatBRL(receivedValue)} · Entra no caixa{" "}
+                            {formatBRL(cashAmount)} · Troco {formatBRL(changeValue)} via{" "}
+                            {changeMethod}
+                          </p>
                           <Label htmlFor="tx-change-method">Como o troco foi devolvido?</Label>
                           <Select
                             value={changeMethod}
