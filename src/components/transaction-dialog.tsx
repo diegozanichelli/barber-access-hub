@@ -598,8 +598,9 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                 {hasCash ? (
                   <>
                     <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
-                      🚨 ATENÇÃO: No valor do pagamento em dinheiro digite EXATAMENTE o que entra no
-                      caixa. Se o cliente pagou com nota maior, informe abaixo quanto ele entregou.
+                      🚨 Pagou com nota maior? Em "Valor pago" digite o valor da venda (o que entra
+                      no caixa) e, no campo abaixo, o que o cliente entregou. O troco pode ser
+                      devolvido em dinheiro ou por Pix.
                     </p>
 
                     <div className="space-y-2 rounded-lg border border-border/60 p-3">
