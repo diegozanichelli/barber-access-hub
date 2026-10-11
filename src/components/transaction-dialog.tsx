@@ -598,8 +598,9 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                 {hasCash ? (
                   <>
                     <p className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
-                      🚨 ATENÇÃO: No valor do pagamento em dinheiro digite EXATAMENTE o que entra no
-                      caixa. Se o cliente pagou com nota maior, informe abaixo quanto ele entregou.
+                      🚨 Pagou com nota maior? Em "Valor pago" digite o valor da venda (o que entra
+                      no caixa) e, no campo abaixo, o que o cliente entregou. O troco pode ser
+                      devolvido em dinheiro ou por Pix.
                     </p>
 
                     <div className="space-y-2 rounded-lg border border-border/60 p-3">
@@ -611,7 +612,29 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                         className="h-12 text-lg"
                         inputMode="decimal"
                         value={cashReceived}
-                        onChange={(e) => setCashReceived(e.target.value)}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setCashReceived(raw);
+                          // Nota maior: ajusta o "Valor pago" em dinheiro para o que
+                          // realmente entra no caixa (total da comanda menos o que já
+                          // está em outras formas de pagamento).
+                          const delivered = parseAmount(raw);
+                          if (!Number.isFinite(delivered) || delivered <= itemsTotal) return;
+                          const nonCash = parsedPayments
+                            .filter((p) => p.method !== "Dinheiro" && Number.isFinite(p.value))
+                            .reduce((sum, p) => sum + p.value, 0);
+                          const neededCash =
+                            Math.round((itemsTotal - nonCash) * 100) / 100;
+                          if (neededCash <= 0) return;
+                          const formatted = neededCash.toFixed(2).replace(".", ",");
+                          setPayments((prev) => {
+                            const cashIdx = prev.findIndex((p) => p.method === "Dinheiro");
+                            if (cashIdx < 0) return prev;
+                            return prev.map((p, i) =>
+                              i === cashIdx ? { ...p, amount: formatted } : p,
+                            );
+                          });
+                        }}
                         placeholder="0,00"
                       />
                       {changeInvalid ? (
@@ -624,6 +647,11 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                             <span className="text-sm text-muted-foreground">Troco a devolver</span>
                             <span className="text-lg font-semibold">{formatBRL(changeValue)}</span>
                           </div>
+                          <p className="rounded-lg border border-primary/40 bg-primary/10 p-3 text-xs font-semibold">
+                            Cliente entregou {formatBRL(receivedValue)} · Entra no caixa{" "}
+                            {formatBRL(cashAmount)} · Troco {formatBRL(changeValue)} via{" "}
+                            {changeMethod}
+                          </p>
                           <Label htmlFor="tx-change-method">Como o troco foi devolvido?</Label>
                           <Select
                             value={changeMethod}
