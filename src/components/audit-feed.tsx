@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/cash";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import { hojeManaus, intervaloManausUtc } from "@/lib/ponte-caixa";
+import { formatShiftDuration, isLongShift, shiftDurationMs } from "@/lib/shift-duration";
 import { friendlyError } from "@/lib/errors";
 import { archiveEmptyOpening, correctOpeningOnServer } from "@/lib/opening-admin.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -689,11 +690,17 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
               const openingTotal = Number(shift.actual_opening_total ?? 0);
               const cashTotal = openingTotal + cashIncomeTotal + pixChangeTotal - expenseTotal;
               const isOpen = shift.status === "open";
+              const durationMs = shiftDurationMs(shift.opened_at, shift.closed_at);
+              const longShift = isLongShift(durationMs);
               return (
                 <section
                   key={shift.id}
                   className={`rounded-lg border p-3 ${
-                    isOpen ? "border-primary/40 bg-primary/5" : "border-border/60"
+                    isOpen && longShift
+                      ? "border-destructive/60 bg-destructive/5"
+                      : isOpen
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border/60"
                   }`}
                 >
                   <header className="flex flex-wrap items-center justify-between gap-2">
@@ -715,10 +722,32 @@ export function AuditFeed({ selectedUnitId }: { selectedUnitId?: string }) {
                               ? "Com divergência"
                               : "Fechado"}
                         </span>
+                        {longShift ? (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                              isOpen
+                                ? "bg-destructive/15 text-destructive"
+                                : "bg-warning/20 text-warning"
+                            }`}
+                          >
+                            {isOpen
+                              ? `Há ${formatShiftDuration(durationMs)} sem fechar`
+                              : `Ficou ${formatShiftDuration(durationMs)} aberto`}
+                          </span>
+                        ) : null}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Aberto em {new Date(shift.opened_at).toLocaleString("pt-BR")} por{" "}
                         {references.names[shift.opened_by] ?? "Usuário"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {shift.closed_at
+                          ? `Fechado em ${new Date(shift.closed_at).toLocaleString("pt-BR")}${
+                              shift.closed_by
+                                ? ` por ${references.names[shift.closed_by] ?? "Usuário"}`
+                                : ""
+                            } · ${formatShiftDuration(durationMs)} de turno`
+                          : `Ainda aberto · ${formatShiftDuration(durationMs)} até agora`}
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
