@@ -63,9 +63,15 @@ describe("buildChangeParts", () => {
   });
 
   test("exige duas partes positivas no troco dividido", () => {
-    expect(() => buildChangeParts(33.5, "Dividido", 0)).toThrow();
-    expect(() => buildChangeParts(33.5, "Dividido", 33.5)).toThrow();
-    expect(() => buildChangeParts(33.5, "Dividido", Number.NaN)).toThrow();
+    for (const invalidCashAmount of [0, 33.5, Number.NaN]) {
+      let rejected = false;
+      try {
+        buildChangeParts(33.5, "Dividido", invalidCashAmount);
+      } catch {
+        rejected = true;
+      }
+      expect(rejected).toBe(true);
+    }
   });
 });
 
