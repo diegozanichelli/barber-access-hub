@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   allocateComandaRows,
+  buildChangeParts,
   displayedIncomeCategory,
   incomePhotoRequired,
   isMissingUpgradeEnum,

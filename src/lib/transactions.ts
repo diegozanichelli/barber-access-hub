@@ -185,8 +185,12 @@ export async function getReceiptUrl(path: string): Promise<string | null> {
 }
 
 /** Formas possíveis de devolver o troco ao cliente. */
-export const CHANGE_METHODS = ["Dinheiro", "Pix"] as const;
+export const CHANGE_METHODS = ["Dinheiro", "Pix", "Dividido"] as const;
 export type ChangeMethod = (typeof CHANGE_METHODS)[number];
+export type ChangePart = {
+  paymentMethod: Extract<PaymentMethod, "Dinheiro" | "Pix">;
+  amount: number;
+};
 
 /**
  * Troco = o que o cliente entregou em espécie menos o valor da venda pago em
@@ -196,4 +200,31 @@ export function computeChange(received: number, cashAmount: number): number {
   if (!Number.isFinite(received) || !Number.isFinite(cashAmount)) return 0;
   const diff = Math.round((received - cashAmount) * 100) / 100;
   return diff > 0 ? diff : 0;
+}
+
+/**
+ * Separa o troco nos lançamentos físicos que serão gravados. No modo dividido,
+ * as duas partes precisam ser positivas e somam exatamente o troco total.
+ */
+export function buildChangeParts(
+  changeValue: number,
+  method: ChangeMethod,
+  cashAmount = changeValue,
+): ChangePart[] {
+  const totalCents = Math.round(changeValue * 100);
+  if (!Number.isFinite(changeValue) || totalCents <= 0) return [];
+  if (method === "Dinheiro") return [{ paymentMethod: "Dinheiro", amount: totalCents / 100 }];
+  if (method === "Pix") return [{ paymentMethod: "Pix", amount: totalCents / 100 }];
+
+  const cashCents = Math.round(cashAmount * 100);
+  if (!Number.isFinite(cashAmount) || cashCents <= 0 || cashCents >= totalCents) {
+    throw new Error(
+      "No troco dividido, informe uma parte em dinheiro maior que zero e menor que o troco total.",
+    );
+  }
+
+  return [
+    { paymentMethod: "Dinheiro", amount: cashCents / 100 },
+    { paymentMethod: "Pix", amount: (totalCents - cashCents) / 100 },
+  ];
 }
