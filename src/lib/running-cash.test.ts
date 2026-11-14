@@ -83,6 +83,31 @@ describe("computeRunningCash", () => {
     ).toBe(965.25);
   });
 
+  test("troco dividido mantém na gaveta apenas a parte devolvida no Pix", () => {
+    expect(
+      computeRunningCash(0, [
+        {
+          transaction_type: "income",
+          payment_method: "Dinheiro",
+          category: "Serviços",
+          amount: 166.5,
+        },
+        {
+          transaction_type: "expense",
+          payment_method: "Dinheiro",
+          category: "Troco",
+          amount: 13.5,
+        },
+        {
+          transaction_type: "expense",
+          payment_method: "Pix",
+          category: "Troco",
+          amount: 20,
+        },
+      ]),
+    ).toBe(186.5); // Entraram R$ 200,00 e saíram R$ 13,50 em espécie.
+  });
+
   test("subtrai retirada de sócio que saiu da gaveta, não a do cofre", () => {
     expect(
       computeRunningCash(

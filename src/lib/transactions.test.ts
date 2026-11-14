@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   allocateComandaRows,
+  buildChangeParts,
   displayedIncomeCategory,
   incomePhotoRequired,
   isMissingUpgradeEnum,
@@ -43,6 +44,34 @@ describe("transaction rules", () => {
     expect(isRoundAmount(38)).toBe(true);
     expect(isRoundAmount(38.5)).toBe(false);
     expect(isRoundAmount(0)).toBe(false);
+  });
+});
+
+describe("buildChangeParts", () => {
+  test("divide R$ 33,50 em R$ 13,50 no dinheiro e R$ 20,00 no Pix", () => {
+    expect(buildChangeParts(33.5, "Dividido", 13.5)).toEqual([
+      { paymentMethod: "Dinheiro", amount: 13.5 },
+      { paymentMethod: "Pix", amount: 20 },
+    ]);
+  });
+
+  test("mantém o troco integral em uma única forma", () => {
+    expect(buildChangeParts(33.5, "Dinheiro")).toEqual([
+      { paymentMethod: "Dinheiro", amount: 33.5 },
+    ]);
+    expect(buildChangeParts(33.5, "Pix")).toEqual([{ paymentMethod: "Pix", amount: 33.5 }]);
+  });
+
+  test("exige duas partes positivas no troco dividido", () => {
+    for (const invalidCashAmount of [0, 33.5, Number.NaN]) {
+      let rejected = false;
+      try {
+        buildChangeParts(33.5, "Dividido", invalidCashAmount);
+      } catch {
+        rejected = true;
+      }
+      expect(rejected).toBe(true);
+    }
   });
 });
 

@@ -29,6 +29,7 @@ import {
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
   allocateComandaRows,
+  buildChangeParts,
   clientNameSchema,
   comandaItemSchema,
   comandaPaymentSchema,
@@ -80,6 +81,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
 
   const [cashReceived, setCashReceived] = useState("");
   const [changeMethod, setChangeMethod] = useState<ChangeMethod>("Dinheiro");
+  const [changeCashAmount, setChangeCashAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const isIncome = type === "income";
@@ -112,7 +114,14 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     hasCash &&
     cashReceived.trim() !== "" &&
     (!Number.isFinite(receivedValue) || receivedValue < cashAmount);
-  const changeIsPix = isIncome && changeValue > 0 && changeMethod === "Pix";
+  const splitCashValue = parseAmount(changeCashAmount);
+  const changeSplitInvalid =
+    isIncome &&
+    changeValue > 0 &&
+    changeMethod === "Dividido" &&
+    (!Number.isFinite(splitCashValue) || splitCashValue <= 0 || splitCashValue >= changeValue);
+  const changeIsPix =
+    isIncome && changeValue > 0 && (changeMethod === "Pix" || changeMethod === "Dividido");
   // O troco em Pix reaproveita o comprovante principal — sem segunda caixa de foto.
   const photoRequired = isIncome ? hasPix || changeIsPix : true;
 
@@ -132,6 +141,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     setFile(null);
     setCashReceived("");
     setChangeMethod("Dinheiro");
+    setChangeCashAmount("");
     setError(null);
   }
 
@@ -190,6 +200,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         if (photoRequired && !file) {
           throw new Error("O comprovante é obrigatório para pagamentos e trocos via Pix.");
         }
+        const changeParts = buildChangeParts(changeValue, changeMethod, splitCashValue);
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
         const allocated = allocateComandaRows(validItems, validPayments);
@@ -239,22 +250,28 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           }
         }
 
-        if (changeValue > 0) {
-          const { error: changeError } = await supabase.from("transactions").insert({
-            shift_id: shiftId,
-            unit_id: unitId,
-            user_id: userId,
-            transaction_type: "expense",
-            category: "Troco",
-            payment_method: changeMethod,
-            client_name: nameParsed.data,
-            amount: changeValue,
-            description: `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`,
-            // Troco em Pix reaproveita o comprovante principal já enviado acima.
-            photo_url: changeMethod === "Pix" ? photoPath : null,
-            // O troco por Pix é uma saída da conta, não uma entrada a conferir.
-            pix_status: "paid",
-          });
+        if (changeParts.length > 0) {
+          const splitDescription =
+            changeMethod === "Dividido"
+              ? `Troco dividido de ${formatBRL(changeValue)}: ${formatBRL(splitCashValue)} em dinheiro + ${formatBRL(changeValue - splitCashValue)} no Pix (recebido ${formatBRL(receivedValue)} em dinheiro)`
+              : `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`;
+          const { error: changeError } = await supabase.from("transactions").insert(
+            changeParts.map((part) => ({
+              shift_id: shiftId,
+              unit_id: unitId,
+              user_id: userId,
+              transaction_type: "expense",
+              category: "Troco",
+              payment_method: part.paymentMethod,
+              client_name: nameParsed.data,
+              amount: part.amount,
+              description: splitDescription,
+              // Troco em Pix reaproveita o comprovante principal já enviado acima.
+              photo_url: part.paymentMethod === "Pix" ? photoPath : null,
+              // O troco por Pix é uma saída da conta, não uma entrada a conferir.
+              pix_status: "paid",
+            })),
+          );
           if (changeError) throw changeError;
         }
         return itemsSum;
@@ -314,7 +331,12 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   });
 
   const incomeBlocked =
-    isIncome && ((photoRequired && !file) || changeInvalid || !hasValidItems || !paymentsMatch);
+    isIncome &&
+    ((photoRequired && !file) ||
+      changeInvalid ||
+      changeSplitInvalid ||
+      !hasValidItems ||
+      !paymentsMatch);
   const blocked = isIncome ? incomeBlocked : photoRequired && !file;
 
   const saveLabel = !isIncome
@@ -325,7 +347,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
       ? "Adicione um item"
       : !paymentsMatch
         ? "Pagamento não confere"
-        : changeInvalid
+        : changeInvalid || changeSplitInvalid
           ? "Confira o troco"
           : photoRequired && !file
             ? "Foto obrigatória"
@@ -627,7 +649,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                           <p className="rounded-lg border border-primary/40 bg-primary/10 p-3 text-xs font-semibold">
                             Cliente entregou {formatBRL(receivedValue)} · Entra no caixa{" "}
                             {formatBRL(cashAmount)} · Troco {formatBRL(changeValue)} via{" "}
-                            {changeMethod}
+                            {changeMethod === "Dividido" ? "Dinheiro + Pix" : changeMethod}
                           </p>
                           <Label htmlFor="tx-change-method">Como o troco foi devolvido?</Label>
                           <Select
@@ -640,13 +662,55 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                             <SelectContent>
                               {CHANGE_METHODS.map((m) => (
                                 <SelectItem key={m} value={m}>
-                                  {m}
+                                  {m === "Dividido" ? "Dividido (Dinheiro + Pix)" : m}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                          {changeMethod === "Dividido" ? (
+                            <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+                              <div className="space-y-2">
+                                <Label htmlFor="tx-change-cash">Quanto devolveu em dinheiro?</Label>
+                                <div className="relative">
+                                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
+                                    R$
+                                  </span>
+                                  <Input
+                                    id="tx-change-cash"
+                                    className="h-12 pl-10 text-lg"
+                                    inputMode="decimal"
+                                    value={changeCashAmount}
+                                    onChange={(e) => setChangeCashAmount(e.target.value)}
+                                    placeholder="0,00"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between rounded-lg bg-background px-3 py-2">
+                                <span className="text-sm text-muted-foreground">
+                                  Restante devolvido no Pix
+                                </span>
+                                <span className="font-semibold">
+                                  {formatBRL(
+                                    Number.isFinite(splitCashValue)
+                                      ? Math.max(0, changeValue - splitCashValue)
+                                      : changeValue,
+                                  )}
+                                </span>
+                              </div>
+                              {changeSplitInvalid && changeCashAmount.trim() !== "" ? (
+                                <p className="text-xs font-semibold text-destructive">
+                                  A parte em dinheiro deve ser maior que zero e menor que{" "}
+                                  {formatBRL(changeValue)}.
+                                </p>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">
+                                  Digite a parte em dinheiro. O restante será devolvido no Pix.
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
                           <p className="text-xs text-muted-foreground">
-                            {changeMethod === "Pix"
+                            {changeMethod === "Pix" || changeMethod === "Dividido"
                               ? "Anexe abaixo o comprovante do Pix do troco (obrigatório) — é a mesma foto do comprovante da venda."
                               : "O troco em dinheiro sai da gaveta: fica registrado, mas o saldo esperado continua o valor da venda."}
                           </p>
@@ -720,7 +784,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
 
           {isIncome && photoRequired ? (
             <p className="text-xs text-muted-foreground">
-              Pagamentos via Pix exigem comprovante. Nas demais modalidades a foto é opcional.
+              Pagamentos ou trocos via Pix exigem comprovante. Nas demais modalidades a foto é
+              opcional.
             </p>
           ) : null}
 
