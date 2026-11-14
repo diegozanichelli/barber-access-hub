@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as DevSplitChangeRouteImport } from './routes/dev-split-change'
 import { Route as PendenteRouteImport } from './routes/pendente'
 import { Route as AuthenticatedAtendenteRouteImport } from './routes/_authenticated/atendente'
 import { Route as AuthenticatedAuditorRouteImport } from './routes/_authenticated/auditor'
@@ -30,6 +31,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevSplitChangeRoute = DevSplitChangeRouteImport.update({
+  id: '/dev-split-change',
+  path: '/dev-split-change',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PendenteRoute = PendenteRouteImport.update({
@@ -61,6 +67,7 @@ const AuthenticatedSupervisorRoute = AuthenticatedSupervisorRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/dev-split-change': typeof DevSplitChangeRoute
   '/pendente': typeof PendenteRoute
   '/atendente': typeof AuthenticatedAtendenteRoute
   '/auditor': typeof AuthenticatedAuditorRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/dev-split-change': typeof DevSplitChangeRoute
   '/pendente': typeof PendenteRoute
   '/atendente': typeof AuthenticatedAtendenteRoute
   '/auditor': typeof AuthenticatedAuditorRoute
@@ -81,6 +89,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/dev-split-change': typeof DevSplitChangeRoute
   '/pendente': typeof PendenteRoute
   '/_authenticated/atendente': typeof AuthenticatedAtendenteRoute
   '/_authenticated/auditor': typeof AuthenticatedAuditorRoute
@@ -92,6 +101,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/dev-split-change'
     | '/pendente'
     | '/atendente'
     | '/auditor'
@@ -101,6 +111,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/dev-split-change'
     | '/pendente'
     | '/atendente'
     | '/auditor'
@@ -111,6 +122,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/dev-split-change'
     | '/pendente'
     | '/_authenticated/atendente'
     | '/_authenticated/auditor'
@@ -122,6 +134,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DevSplitChangeRoute: typeof DevSplitChangeRoute
   PendenteRoute: typeof PendenteRoute
 }
 
@@ -146,6 +159,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev-split-change': {
+      id: '/dev-split-change'
+      path: '/dev-split-change'
+      fullPath: '/dev-split-change'
+      preLoaderRoute: typeof DevSplitChangeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pendente': {
@@ -207,6 +227,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  DevSplitChangeRoute: DevSplitChangeRoute,
   PendenteRoute: PendenteRoute,
 }
 export const routeTree = rootRouteImport
