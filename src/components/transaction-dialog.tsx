@@ -649,7 +649,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                           <p className="rounded-lg border border-primary/40 bg-primary/10 p-3 text-xs font-semibold">
                             Cliente entregou {formatBRL(receivedValue)} · Entra no caixa{" "}
                             {formatBRL(cashAmount)} · Troco {formatBRL(changeValue)} via{" "}
-                            {changeMethod}
+                            {changeMethod === "Dividido" ? "Dinheiro + Pix" : changeMethod}
                           </p>
                           <Label htmlFor="tx-change-method">Como o troco foi devolvido?</Label>
                           <Select
@@ -662,13 +662,55 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
                             <SelectContent>
                               {CHANGE_METHODS.map((m) => (
                                 <SelectItem key={m} value={m}>
-                                  {m}
+                                  {m === "Dividido" ? "Dividido (Dinheiro + Pix)" : m}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                          {changeMethod === "Dividido" ? (
+                            <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+                              <div className="space-y-2">
+                                <Label htmlFor="tx-change-cash">Quanto devolveu em dinheiro?</Label>
+                                <div className="relative">
+                                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
+                                    R$
+                                  </span>
+                                  <Input
+                                    id="tx-change-cash"
+                                    className="h-12 pl-10 text-lg"
+                                    inputMode="decimal"
+                                    value={changeCashAmount}
+                                    onChange={(e) => setChangeCashAmount(e.target.value)}
+                                    placeholder="0,00"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between rounded-lg bg-background px-3 py-2">
+                                <span className="text-sm text-muted-foreground">
+                                  Restante devolvido no Pix
+                                </span>
+                                <span className="font-semibold">
+                                  {formatBRL(
+                                    Number.isFinite(splitCashValue)
+                                      ? Math.max(0, changeValue - splitCashValue)
+                                      : changeValue,
+                                  )}
+                                </span>
+                              </div>
+                              {changeSplitInvalid && changeCashAmount.trim() !== "" ? (
+                                <p className="text-xs font-semibold text-destructive">
+                                  A parte em dinheiro deve ser maior que zero e menor que{" "}
+                                  {formatBRL(changeValue)}.
+                                </p>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">
+                                  Digite a parte em dinheiro. O restante será devolvido no Pix.
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
                           <p className="text-xs text-muted-foreground">
-                            {changeMethod === "Pix"
+                            {changeMethod === "Pix" || changeMethod === "Dividido"
                               ? "Anexe abaixo o comprovante do Pix do troco (obrigatório) — é a mesma foto do comprovante da venda."
                               : "O troco em dinheiro sai da gaveta: fica registrado, mas o saldo esperado continua o valor da venda."}
                           </p>
@@ -742,7 +784,8 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
 
           {isIncome && photoRequired ? (
             <p className="text-xs text-muted-foreground">
-              Pagamentos via Pix exigem comprovante. Nas demais modalidades a foto é opcional.
+              Pagamentos ou trocos via Pix exigem comprovante. Nas demais modalidades a foto é
+              opcional.
             </p>
           ) : null}
 
