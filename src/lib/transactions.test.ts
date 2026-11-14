@@ -47,6 +47,28 @@ describe("transaction rules", () => {
   });
 });
 
+describe("buildChangeParts", () => {
+  test("divide R$ 33,50 em R$ 13,50 no dinheiro e R$ 20,00 no Pix", () => {
+    expect(buildChangeParts(33.5, "Dividido", 13.5)).toEqual([
+      { paymentMethod: "Dinheiro", amount: 13.5 },
+      { paymentMethod: "Pix", amount: 20 },
+    ]);
+  });
+
+  test("mantém o troco integral em uma única forma", () => {
+    expect(buildChangeParts(33.5, "Dinheiro")).toEqual([
+      { paymentMethod: "Dinheiro", amount: 33.5 },
+    ]);
+    expect(buildChangeParts(33.5, "Pix")).toEqual([{ paymentMethod: "Pix", amount: 33.5 }]);
+  });
+
+  test("exige duas partes positivas no troco dividido", () => {
+    expect(() => buildChangeParts(33.5, "Dividido", 0)).toThrow();
+    expect(() => buildChangeParts(33.5, "Dividido", 33.5)).toThrow();
+    expect(() => buildChangeParts(33.5, "Dividido", Number.NaN)).toThrow();
+  });
+});
+
 describe("allocateComandaRows", () => {
   test("um item, um pagamento: uma linha", () => {
     const items: ComandaItem[] = [{ category: "Produtos", amount: 30 }];

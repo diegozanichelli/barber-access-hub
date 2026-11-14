@@ -29,6 +29,7 @@ import {
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
   allocateComandaRows,
+  buildChangeParts,
   clientNameSchema,
   comandaItemSchema,
   comandaPaymentSchema,
@@ -80,6 +81,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
 
   const [cashReceived, setCashReceived] = useState("");
   const [changeMethod, setChangeMethod] = useState<ChangeMethod>("Dinheiro");
+  const [changeCashAmount, setChangeCashAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const isIncome = type === "income";
@@ -112,7 +114,14 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     hasCash &&
     cashReceived.trim() !== "" &&
     (!Number.isFinite(receivedValue) || receivedValue < cashAmount);
-  const changeIsPix = isIncome && changeValue > 0 && changeMethod === "Pix";
+  const splitCashValue = parseAmount(changeCashAmount);
+  const changeSplitInvalid =
+    isIncome &&
+    changeValue > 0 &&
+    changeMethod === "Dividido" &&
+    (!Number.isFinite(splitCashValue) || splitCashValue <= 0 || splitCashValue >= changeValue);
+  const changeIsPix =
+    isIncome && changeValue > 0 && (changeMethod === "Pix" || changeMethod === "Dividido");
   // O troco em Pix reaproveita o comprovante principal — sem segunda caixa de foto.
   const photoRequired = isIncome ? hasPix || changeIsPix : true;
 
@@ -132,6 +141,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
     setFile(null);
     setCashReceived("");
     setChangeMethod("Dinheiro");
+    setChangeCashAmount("");
     setError(null);
   }
 
@@ -190,6 +200,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
         if (photoRequired && !file) {
           throw new Error("O comprovante é obrigatório para pagamentos e trocos via Pix.");
         }
+        const changeParts = buildChangeParts(changeValue, changeMethod, splitCashValue);
 
         const photoPath = file ? await uploadReceipt(file, unitId, shiftId) : null;
         const allocated = allocateComandaRows(validItems, validPayments);
@@ -239,22 +250,28 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
           }
         }
 
-        if (changeValue > 0) {
-          const { error: changeError } = await supabase.from("transactions").insert({
-            shift_id: shiftId,
-            unit_id: unitId,
-            user_id: userId,
-            transaction_type: "expense",
-            category: "Troco",
-            payment_method: changeMethod,
-            client_name: nameParsed.data,
-            amount: changeValue,
-            description: `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`,
-            // Troco em Pix reaproveita o comprovante principal já enviado acima.
-            photo_url: changeMethod === "Pix" ? photoPath : null,
-            // O troco por Pix é uma saída da conta, não uma entrada a conferir.
-            pix_status: "paid",
-          });
+        if (changeParts.length > 0) {
+          const splitDescription =
+            changeMethod === "Dividido"
+              ? `Troco dividido de ${formatBRL(changeValue)}: ${formatBRL(splitCashValue)} em dinheiro + ${formatBRL(changeValue - splitCashValue)} no Pix (recebido ${formatBRL(receivedValue)} em dinheiro)`
+              : `Troco de ${formatBRL(changeValue)} (recebido ${formatBRL(receivedValue)} em dinheiro)`;
+          const { error: changeError } = await supabase.from("transactions").insert(
+            changeParts.map((part) => ({
+              shift_id: shiftId,
+              unit_id: unitId,
+              user_id: userId,
+              transaction_type: "expense",
+              category: "Troco",
+              payment_method: part.paymentMethod,
+              client_name: nameParsed.data,
+              amount: part.amount,
+              description: splitDescription,
+              // Troco em Pix reaproveita o comprovante principal já enviado acima.
+              photo_url: part.paymentMethod === "Pix" ? photoPath : null,
+              // O troco por Pix é uma saída da conta, não uma entrada a conferir.
+              pix_status: "paid",
+            })),
+          );
           if (changeError) throw changeError;
         }
         return itemsSum;
@@ -314,7 +331,12 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
   });
 
   const incomeBlocked =
-    isIncome && ((photoRequired && !file) || changeInvalid || !hasValidItems || !paymentsMatch);
+    isIncome &&
+    ((photoRequired && !file) ||
+      changeInvalid ||
+      changeSplitInvalid ||
+      !hasValidItems ||
+      !paymentsMatch);
   const blocked = isIncome ? incomeBlocked : photoRequired && !file;
 
   const saveLabel = !isIncome
@@ -325,7 +347,7 @@ export function TransactionDialog({ type, onOpenChange, shiftId, unitId, userId 
       ? "Adicione um item"
       : !paymentsMatch
         ? "Pagamento não confere"
-        : changeInvalid
+        : changeInvalid || changeSplitInvalid
           ? "Confira o troco"
           : photoRequired && !file
             ? "Foto obrigatória"
